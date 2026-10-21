@@ -21,7 +21,8 @@
       #menu h1 { margin: 0 0 4px; font-size: 44px; letter-spacing: 1px; text-shadow: 0 4px 0 #000a; text-align: center; }
       #menu p { margin: 0 0 8px; opacity: .7; }
       #menu button { min-width: 260px; padding: 14px 22px; font-size: 18px; font-weight: 700; color: #fff; background: #3a2f6b; border: 2px solid #8a7be0; border-radius: 10px; cursor: pointer; }
-      #menu button:hover, #menu button:focus { background: #5342a3; outline: none; }
+      #menu button:disabled { opacity: .45; cursor: default; background: #2a2540; border-color: #4a4470; }
+      #menu button:hover:not(:disabled), #menu button:focus { background: #5342a3; outline: none; }
       .tb.pause { top: 14px; right: 16px; bottom: auto; width: 44px; height: 44px; font-size: 16px; }
       #help { position: absolute; top: 14px; right: 16px; font-size: 12px; opacity: .55; text-align: right; line-height: 1.5; }
       #touch { position: absolute; inset: 0; display: none; }
@@ -43,7 +44,7 @@
     <div id="hud">
       <div id="bars"><div id="hearts"></div><div id="stamina"><i></i></div><div id="souls"></div></div>
       <div id="toast"></div>
-      <div id="help">A/D ou ← → mover · Espaço pular<br />J atacar · I arco · K bloquear · L esquiva · R reiniciar · Esc pausar<br />Gamepad: A pular · X atacar · Y arco · B esquiva · RB bloquear · Start pausar</div>
+      <div id="help">A/D ou ← → mover · Espaço pular<br />J atacar (aperte 3x: combo) · I arco · K bloquear (na hora do golpe = parry) · L esquiva<br />No ar: K + J = golpe para baixo · R reiniciar · Esc pausar<br />Gamepad: A pular · X atacar · Y arco · B esquiva · RB bloquear · Start pausar</div>
       <div id="msg"></div>
       <div id="touch"></div>
     </div>

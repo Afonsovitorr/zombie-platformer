@@ -3,7 +3,9 @@ import { Body, moveBody, sign } from './physics';
 import type { Game } from './game';
 import type { EnemyDef } from './data/enemies';
 
-type State = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'hurt' | 'dead';
+type State = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'hurt' | 'stun' | 'dead';
+
+const STUN_TIME = 1.4;
 
 const box = (w: number, h: number, d: number, color: number) =>
   new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1 }));
@@ -50,16 +52,23 @@ export class Enemy {
     return this.state === 'dead';
   }
 
-  hurt(dmg: number, dir: number, g: Game) {
+  // A parried enemy is left open: hits on it deal double damage.
+  stun() {
     if (this.dead) return;
-    this.hp -= dmg;
-    g.hitStop = 0.06;
+    this.body.vx = 0;
+    this.go('stun');
+  }
+
+  hurt(dmg: number, dir: number, g: Game, kb = 1) {
+    if (this.dead) return;
+    this.hp -= this.state === 'stun' ? dmg * 2 : dmg;
+    g.hitStop = Math.max(g.hitStop, 0.06);
     const heavy = this.def.scale > 1.2 ? 0.4 : 1;
-    this.body.vx = dir * 6 * heavy;
+    this.body.vx = dir * 6 * heavy * kb;
     this.body.vy = 4 * heavy;
     this.go(this.hp <= 0 ? 'dead' : 'hurt');
     this.skin.emissive.setHex(0xffffff);
-    if (this.hp <= 0) g.addSouls(this.def.souls);
+    if (this.hp <= 0) g.onKill(this.def);
   }
 
   update(dt: number, g: Game) {
@@ -93,7 +102,7 @@ export class Enemy {
         if (!this.struck) {
           this.struck = true;
           if (Math.abs(dx) < d.reach + 0.5 && Math.abs(dy) < d.h * 0.85 && dx * this.facing > -0.3) {
-            p.takeDamage(d.damage, b.x, g);
+            p.takeDamage(d.damage, b.x, g, this);
           }
         }
         if (this.t > d.active) this.go('recover');
@@ -105,6 +114,11 @@ export class Enemy {
       case 'hurt':
         b.vx *= 0.9;
         if (this.t > 0.4) this.go('chase');
+        break;
+      case 'stun':
+        b.vx = 0;
+        this.skin.emissive.setHex(0x2244aa);
+        if (this.t > STUN_TIME) this.go('chase');
         break;
       case 'dead':
         b.vx *= 0.9;
@@ -118,7 +132,7 @@ export class Enemy {
     this.group.position.set(b.x, b.y, 0);
     const targetRot = this.facing > 0 ? 0 : Math.PI;
     this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.3;
-    const lean = this.state === 'windup' ? -0.35 : this.state === 'attack' ? 0.3 : 0;
+    const lean = this.state === 'windup' ? -0.35 : this.state === 'attack' ? 0.3 : this.state === 'stun' ? 0.25 : 0;
     this.model.rotation.z += (lean - this.model.rotation.z) * 0.4;
     this.arms.rotation.z = this.state === 'windup' ? 0.9 : this.state === 'attack' ? -0.5 : Math.sin(this.t * 6) * 0.08;
     if (this.state === 'dead') {

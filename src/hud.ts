@@ -7,7 +7,7 @@ export class Hud {
   private toastTimer = 0;
   private last = '';
 
-  set(hp: number, maxHp: number, stamina: number, maxStamina: number, souls: number) {
+  set(hp: number, maxHp: number, stamina: number, maxStamina: number, souls: number, arrows: number) {
     const hearts = '♥'.repeat(Math.max(0, hp)) + '♡'.repeat(Math.max(0, maxHp - hp));
     if (hearts !== this.last) {
       this.hearts.textContent = hearts;
@@ -15,7 +15,7 @@ export class Hud {
     }
     this.bar.style.width = `${(stamina / maxStamina) * 100}%`;
     this.bar.style.background = stamina < 25 ? '#f59e0b' : '#4ade80';
-    this.souls.textContent = `Almas: ${souls}`;
+    this.souls.textContent = `Almas: ${souls} · Flechas: ${arrows}`;
   }
 
   message(title: string | null, sub = '') {

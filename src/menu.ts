@@ -1,6 +1,7 @@
 export interface MenuButton {
   label: string;
   run: () => void;
+  disabled?: boolean;
 }
 
 export class Menu {
@@ -23,11 +24,12 @@ export class Menu {
     for (const b of buttons) {
       const btn = document.createElement('button');
       btn.textContent = b.label;
+      btn.disabled = !!b.disabled;
       btn.addEventListener('click', b.run);
       this.el.appendChild(btn);
     }
     this.el.style.display = 'flex';
-    this.el.querySelector('button')?.focus();
+    this.el.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }
 
   hide() {

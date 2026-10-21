@@ -8,7 +8,8 @@ import { Enemy } from './enemy';
 import { buildLevel, Level } from './level';
 import { LEVELS } from './data/levels';
 import { ENEMIES } from './data/enemies';
-import { statsFor } from './data/skills';
+import type { EnemyDef } from './data/enemies';
+import { BRANCH_NAMES, SKILLS, statsFor } from './data/skills';
 
 const STEP = 1 / 60;
 const SAFE_SPAWN_GAP = 5; // enemies this close to the respawn point are skipped
@@ -22,6 +23,7 @@ export class Game {
   enemies: Enemy[] = [];
   bolts: Bolt[] = [];
   hitStop = 0;
+  shake = 0; // camera shake intensity, decays every frame
 
   private mode: Mode = 'menu';
   private renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -70,6 +72,15 @@ export class Game {
     this.save.persist();
   }
 
+  toast(text: string) {
+    this.hud.toast(text);
+  }
+
+  onKill(def: EnemyDef) {
+    this.addSouls(def.souls);
+    if (Math.random() < 0.5) this.player.arrows = Math.min(this.player.stats.maxArrows, this.player.arrows + 1);
+  }
+
   private showMainMenu() {
     this.mode = 'menu';
     this.hud.message(null);
@@ -96,14 +107,42 @@ export class Game {
   private togglePause() {
     if (this.mode === 'play') {
       this.mode = 'pause';
-      this.menu.show('Pausado', [
-        { label: 'Continuar', run: () => this.togglePause() },
-        { label: 'Menu principal', run: () => this.showMainMenu() },
-      ]);
+      this.showPause();
     } else if (this.mode === 'pause') {
       this.mode = 'play';
       this.menu.hide();
     }
+  }
+
+  private showPause() {
+    this.menu.show('Pausado', [
+      { label: 'Continuar', run: () => this.togglePause() },
+      { label: 'Habilidades', run: () => this.showSkills() },
+      { label: 'Menu principal', run: () => this.showMainMenu() },
+    ]);
+  }
+
+  private showSkills() {
+    const owned = this.save.data.skills;
+    const buttons = SKILLS.map((s) => {
+      const has = owned.includes(s.id);
+      const locked = !!s.requires && !owned.includes(s.requires);
+      const afford = this.save.data.souls >= s.cost;
+      const status = has ? '✓' : locked ? '🔒' : `${s.cost} almas`;
+      return {
+        label: `[${BRANCH_NAMES[s.branch]}] ${s.name}: ${s.desc} · ${status}`,
+        disabled: has || locked || !afford,
+        run: () => {
+          this.save.data.souls -= s.cost;
+          this.save.data.skills.push(s.id);
+          this.save.persist();
+          this.player.setStats(statsFor(this.save.data.skills));
+          this.showSkills();
+        },
+      };
+    });
+    buttons.push({ label: 'Voltar', disabled: false, run: () => this.showPause() });
+    this.menu.show('Habilidades', buttons, `Almas: ${this.save.data.souls}`);
   }
 
   private reset() {
@@ -143,6 +182,7 @@ export class Game {
       this.save.persist();
       this.player.hp = this.player.maxHp;
       this.player.stamina = this.player.maxStamina;
+      this.player.arrows = this.player.stats.maxArrows;
       this.hud.toast('Fogueira acesa · vida restaurada');
     }
   }
@@ -222,11 +262,16 @@ export class Game {
     cam.position.y += (ty - cam.position.y) * k;
     cam.position.z = 14;
     cam.lookAt(cam.position.x, cam.position.y - 1.4, 0);
+    if (this.shake > 0.001) {
+      cam.position.x += (Math.random() - 0.5) * this.shake;
+      cam.position.y += (Math.random() - 0.5) * this.shake;
+      this.shake *= Math.exp(-9 * frameDt);
+    }
 
     const pulse = 1 + Math.sin(now / 90) * 0.12;
     for (const f of this.flames) f.scale.set(pulse, 1 + (pulse - 1) * 2, pulse);
 
-    this.hud.set(this.player.hp, this.player.maxHp, this.player.stamina, this.player.maxStamina, this.save.data.souls);
+    this.hud.set(this.player.hp, this.player.maxHp, this.player.stamina, this.player.maxStamina, this.save.data.souls, this.player.arrows);
     this.renderer.render(this.scene, cam);
   }
 }
