@@ -24,6 +24,7 @@ export interface SkillDef {
   cost: number; // souls
   requires?: string;
   effects: Partial<Stats>; // added to the base stats
+  bossReward?: boolean; // cannot be bought; granted by defeating a boss
 }
 
 export const SKILLS: SkillDef[] = [
@@ -34,7 +35,7 @@ export const SKILLS: SkillDef[] = [
   { id: 'bastion_3', branch: 'bastion', name: 'Guarda perfeita', desc: 'janela de parry maior', cost: 200, requires: 'bastion_1', effects: { parryWindow: 0.07 } },
   { id: 'hunter_1', branch: 'hunter', name: 'Pernas leves', desc: '+0,7 de velocidade', cost: 100, effects: { runSpeed: 0.7 } },
   { id: 'hunter_2', branch: 'hunter', name: 'Aljava maior', desc: '+5 flechas', cost: 120, requires: 'hunter_1', effects: { maxArrows: 5 } },
-  { id: 'hunter_3', branch: 'hunter', name: 'Pulo duplo', desc: 'um pulo extra no ar', cost: 400, requires: 'hunter_1', effects: { airJumps: 1 } },
+  { id: 'hunter_3', branch: 'hunter', name: 'Pulo duplo', desc: 'um pulo extra no ar', cost: 0, bossReward: true, effects: { airJumps: 1 } },
 ];
 
 export function statsFor(owned: string[]): Stats {

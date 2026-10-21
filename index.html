@@ -18,6 +18,9 @@
       #msg small { font-size: 16px; font-weight: 400; opacity: .8; }
       #souls { font-size: 14px; color: #c9b8ff; text-shadow: 0 2px 0 #0008; }
       #toast { position: absolute; top: 18%; left: 0; right: 0; text-align: center; font-size: 22px; font-weight: 700; text-shadow: 0 2px 0 #000a; opacity: 0; transition: opacity .4s; }
+      #boss { display: none; position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); width: min(560px, 70vw); text-align: center; font-weight: 700; text-shadow: 0 2px 0 #000a; }
+      #boss div { margin-top: 4px; height: 14px; background: #0009; border: 2px solid #fff4; border-radius: 8px; overflow: hidden; }
+      #boss i { display: block; height: 100%; width: 100%; background: linear-gradient(#e5484d, #9b1c20); transition: width .2s; }
       #menu { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(#1b1535ee, #07060cf5); z-index: 5; }
       #menu h1 { margin: 0 0 4px; font-size: 44px; letter-spacing: 1px; text-shadow: 0 4px 0 #000a; text-align: center; }
       #menu p { margin: 0 0 8px; opacity: .7; }
@@ -45,6 +48,7 @@
     <div id="hud">
       <div id="bars"><div id="hearts"></div><div id="stamina"><i></i></div><div id="souls"></div></div>
       <div id="toast"></div>
+      <div id="boss"><span></span><div><i></i></div></div>
       <div id="help">A/D ou ← → mover · Espaço pular<br />J atacar (aperte 3x: combo) · I arco · K bloquear (na hora do golpe = parry) · L esquiva<br />No ar: K + J = golpe para baixo · R reiniciar · Esc pausar<br />Gamepad: A pular · X atacar · Y arco · B esquiva · RB bloquear · Start pausar</div>
       <div id="msg"></div>
       <div id="touch"></div>

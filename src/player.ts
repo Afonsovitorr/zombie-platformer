@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Body, moveBody, sign } from './physics';
 import type { Input } from './input';
 import type { Game } from './game';
-import type { Enemy } from './enemy';
+import type { Foe } from './foe';
 import { BASE_STATS, Stats } from './data/skills';
 import { Actor } from './actor';
 
@@ -310,7 +310,7 @@ export class Player {
     }
   }
 
-  takeDamage(amount: number, srcX: number, g: Game, attacker?: Enemy) {
+  takeDamage(amount: number, srcX: number, g: Game, attacker?: Foe) {
     if (!this.alive || this.invuln > 0) return;
     const b = this.body;
     const away = sign(b.x - srcX);

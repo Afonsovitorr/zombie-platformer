@@ -27,6 +27,17 @@ export class Hud {
     this.msg.style.display = 'flex';
   }
 
+  setBoss(name: string | null, ratio: number) {
+    const el = document.getElementById('boss')!;
+    if (!name) {
+      el.style.display = 'none';
+      return;
+    }
+    el.style.display = 'block';
+    el.querySelector('span')!.textContent = name;
+    el.querySelector<HTMLElement>('i')!.style.width = `${Math.max(0, ratio) * 100}%`;
+  }
+
   toast(text: string) {
     this.toastEl.textContent = text;
     this.toastEl.style.opacity = '1';

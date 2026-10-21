@@ -1,14 +1,23 @@
 import * as THREE from 'three';
-import { Body, moveBody, sign } from './physics';
+import { Body, Box, moveBody, sign } from './physics';
 import type { Game } from './game';
 import type { EnemyDef } from './data/enemies';
+import type { Foe } from './foe';
 import { Actor } from './actor';
 
 type State = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'hurt' | 'stun' | 'dead';
 
 const STUN_TIME = 1.4;
+const RISE_TIME = 0.8;
+const MAX_MINIONS = 2;
+const SUMMON_COOLDOWN = 7;
 
-export class Enemy {
+// True if there is a floor under (x, y), used so keep-away movement does not walk off ledges.
+export function hasGround(solids: Box[], x: number, y: number) {
+  return solids.some((s) => x >= s.x0 && x <= s.x1 && Math.abs(s.y1 - y) < 0.6);
+}
+
+export class Enemy implements Foe {
   body: Body;
   hp: number;
   facing = -1;
@@ -18,15 +27,18 @@ export class Enemy {
   private state: State = 'idle';
   private t = 0;
   private struck = false;
+  private castCd = 3;
+  private rise = 0;
   private actor: Actor;
   private model: THREE.Group;
 
-  constructor(readonly def: EnemyDef, x: number) {
+  constructor(readonly def: EnemyDef, x: number, y = 0.05, public summoned = false, readonly owner?: Foe) {
     this.hp = def.hp;
-    this.body = { x, y: 0.05, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
+    this.body = { x, y, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
     this.actor = new Actor(def.model, def.h * 1.15, def.tint);
     this.model = this.actor.root;
     this.group.add(this.model);
+    if (summoned) this.rise = RISE_TIME;
   }
 
   get dead() {
@@ -50,18 +62,78 @@ export class Enemy {
     this.go(this.hp <= 0 ? 'dead' : 'hurt');
     this.actor.setEmissive(0xffffff);
     g.audio.play(this.hp <= 0 ? 'death' : kb > 1.5 ? 'heavy' : 'hit');
-    if (this.hp <= 0) g.onKill(this.def);
+    if (this.hp <= 0) g.onKill(this.def, this.summoned);
   }
 
   update(dt: number, g: Game) {
     const b = this.body;
-    const p = g.player;
-    const d = this.def;
     this.t += dt;
-    const dx = p.body.x - b.x;
-    const dy = p.body.y - b.y;
-    const near = Math.abs(dx) < d.detect && Math.abs(dy) < 3.5 && p.alive;
     this.actor.fadeEmissive(0.3);
+
+    if (this.rise > 0) {
+      this.rise -= dt;
+      b.vx = 0;
+      this.model.position.y = -(Math.max(0, this.rise) / RISE_TIME) * this.def.h * 1.2;
+      moveBody(b, dt, g.level.solids);
+      this.group.position.set(b.x, b.y, 0);
+      this.actor.play('idle');
+      this.actor.update(dt);
+      return;
+    }
+    this.model.position.y = 0;
+
+    if (!this.common()) {
+      switch (this.def.kind) {
+        case 'archer': this.updateArcher(g); break;
+        case 'hound': this.updateHound(g); break;
+        case 'necro': this.updateNecro(dt, g); break;
+        default: this.updateMelee(g);
+      }
+    }
+
+    moveBody(b, dt, g.level.solids);
+    if (b.y < -20) this.remove = true;
+
+    this.group.position.set(b.x, b.y, 0);
+    const targetRot = this.facing > 0 ? 0 : Math.PI;
+    this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.3;
+    this.animate(dt);
+  }
+
+  private awake(g: Game) {
+    const p = g.player;
+    const dx = p.body.x - this.body.x;
+    const dy = p.body.y - this.body.y;
+    const reachY = this.def.kind === 'archer' ? 9 : 3.5;
+    return { dx, dy, near: Math.abs(dx) < this.def.detect && Math.abs(dy) < reachY && p.alive };
+  }
+
+  // States every enemy shares: being hurt, stunned (parried) or dead.
+  private common() {
+    const b = this.body;
+    switch (this.state) {
+      case 'hurt':
+        b.vx *= 0.9;
+        if (this.t > 0.4) this.go(this.def.kind === 'archer' ? 'idle' : 'chase');
+        return true;
+      case 'stun':
+        b.vx = 0;
+        this.actor.setEmissive(0x2244aa);
+        if (this.t > STUN_TIME) this.go(this.def.kind === 'archer' ? 'idle' : 'chase');
+        return true;
+      case 'dead':
+        b.vx *= 0.9;
+        if (this.t > 1.6) this.remove = true;
+        return true;
+    }
+    return false;
+  }
+
+  private updateMelee(g: Game) {
+    const b = this.body;
+    const d = this.def;
+    const p = g.player;
+    const { dx, dy, near } = this.awake(g);
 
     switch (this.state) {
       case 'idle':
@@ -96,48 +168,157 @@ export class Enemy {
         b.vx = 0;
         if (this.t > d.recover) this.go('chase');
         break;
-      case 'hurt':
-        b.vx *= 0.9;
-        if (this.t > 0.4) this.go('chase');
+    }
+  }
+
+  private updateArcher(g: Game) {
+    const b = this.body;
+    const d = this.def;
+    const { dx, near } = this.awake(g);
+    b.vx = 0;
+    switch (this.state) {
+      case 'idle':
+        if (near) {
+          this.facing = sign(dx);
+          this.go('windup');
+        }
         break;
-      case 'stun':
+      case 'windup':
+        this.facing = sign(dx);
+        this.actor.setEmissive(0x661111);
+        if (this.t > d.windup) {
+          const p = g.player.body;
+          const sx = b.x + this.facing * 0.7;
+          const sy = b.y + 1.2;
+          const ex = p.x - sx;
+          const ey = p.y + 1.0 - sy;
+          const len = Math.hypot(ex, ey) || 1;
+          g.spawnEnemyBolt('arrow', sx, sy, (ex / len) * 13, (ey / len) * 13, d.damage);
+          g.audio.play('bow');
+          this.go('attack');
+        }
+        break;
+      case 'attack':
+        if (this.t > d.active) this.go('recover');
+        break;
+      case 'recover':
+        if (this.t > d.recover) this.go('idle');
+        break;
+      default:
+        this.go('idle');
+    }
+  }
+
+  private updateHound(g: Game) {
+    const b = this.body;
+    const d = this.def;
+    const p = g.player;
+    const { dx, dy, near } = this.awake(g);
+
+    switch (this.state) {
+      case 'idle':
         b.vx = 0;
-        this.actor.setEmissive(0x2244aa);
-        if (this.t > STUN_TIME) this.go('chase');
+        if (near) this.go('chase');
         break;
-      case 'dead':
-        b.vx *= 0.9;
-        if (this.t > 1.6) this.remove = true;
+      case 'chase':
+        this.facing = sign(dx);
+        b.vx = this.facing * d.speed;
+        if (!near && Math.abs(dx) > d.detect + 4) this.go('idle');
+        else if (Math.abs(dx) < d.reach && Math.abs(dy) < 1.8 && p.alive) {
+          g.audio.play('growl');
+          this.go('windup');
+        }
+        break;
+      case 'windup':
+        b.vx = 0;
+        this.facing = sign(dx);
+        this.actor.setEmissive(0x661111);
+        if (this.t > d.windup) {
+          this.go('attack');
+          b.vx = this.facing * 10;
+          b.vy = 8;
+        }
+        break;
+      case 'attack':
+        if (!this.struck && Math.abs(dx) < 1.0 && Math.abs(dy) < 1.3 && p.alive) {
+          this.struck = true;
+          p.takeDamage(d.damage, b.x, g, this);
+        }
+        if (this.t > d.active || (this.t > 0.25 && b.onGround)) this.go('recover');
+        break;
+      case 'recover':
+        b.vx *= 0.8;
+        if (this.t > d.recover) this.go('chase');
         break;
     }
+  }
 
-    moveBody(b, dt, g.level.solids);
-    if (b.y < -20) this.remove = true;
+  private minions(g: Game) {
+    return g.enemies.filter((e) => e instanceof Enemy && e.owner === this && !e.dead).length;
+  }
 
-    this.group.position.set(b.x, b.y, 0);
-    const targetRot = this.facing > 0 ? 0 : Math.PI;
-    this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.3;
-    this.animate(dt);
+  private updateNecro(dt: number, g: Game) {
+    const b = this.body;
+    const d = this.def;
+    const { dx, near } = this.awake(g);
+    this.castCd -= dt;
+
+    switch (this.state) {
+      case 'idle':
+        b.vx = 0;
+        if (near) this.go('chase');
+        break;
+      case 'chase': {
+        this.facing = sign(dx);
+        const away = -this.facing;
+        const tooClose = Math.abs(dx) < 5;
+        b.vx = tooClose && hasGround(g.level.solids, b.x + away * 0.9, b.y) ? away * d.speed : 0;
+        if (!near && Math.abs(dx) > d.detect + 4) this.go('idle');
+        else if (near && this.castCd <= 0 && this.minions(g) < MAX_MINIONS) this.go('windup');
+        break;
+      }
+      case 'windup':
+        b.vx = 0;
+        this.facing = sign(dx);
+        this.actor.setEmissive(0x5522aa);
+        if (this.t > d.windup) {
+          const side = hasGround(g.level.solids, b.x - this.facing * 2.5, b.y) ? -this.facing : this.facing;
+          g.spawnEnemy('walker', b.x + side * 2.5, b.y + 0.05, this);
+          this.castCd = SUMMON_COOLDOWN;
+          this.go('attack');
+        }
+        break;
+      case 'attack':
+        b.vx = 0;
+        if (this.t > d.active) this.go('recover');
+        break;
+      case 'recover':
+        b.vx = 0;
+        if (this.t > d.recover) this.go('chase');
+        break;
+    }
   }
 
   private animate(dt: number) {
     const a = this.actor;
     const d = this.def;
+    const k = d.kind;
     switch (this.state) {
       case 'idle':
+      case 'recover':
         a.play('idle');
         break;
       case 'chase':
-        a.play(d.speed > 4 ? 'sprint' : 'walk', { speed: Math.max(0.6, d.speed / 2.6) });
+        if (k === 'necro') a.play(Math.abs(this.body.vx) > 0.1 ? 'walk' : 'idle');
+        else a.play(d.speed > 4 ? 'sprint' : 'walk', { speed: Math.max(0.6, d.speed / 2.6) });
         break;
       case 'windup':
-        a.play('holding-both', { fade: 0.15 });
+        a.play(k === 'hound' ? 'crouch' : 'holding-both', { fade: 0.15 });
         break;
       case 'attack':
-        a.play('attack-melee-right', { fit: d.active + 0.1 });
-        break;
-      case 'recover':
-        a.play('idle');
+        if (k === 'archer' || k === 'necro') a.play('holding-both-shoot');
+        else if (k === 'hound') a.play('jump');
+        else a.play('attack-melee-right', { fit: d.active + 0.1 });
         break;
       case 'hurt':
         a.play('fall', { fit: 0.4 });

@@ -11,6 +11,9 @@ export const MODEL_NAMES = [
   'fence', 'fence-damaged', 'iron-fence', 'iron-fence-damaged', 'lantern-glass', 'lightpost-single',
   'crypt-small', 'crypt', 'coffin', 'pine', 'pine-crooked', 'pine-fall', 'trunk', 'rocks', 'rocks-tall',
   'fire-basket', 'candle-multiple', 'pumpkin-carved',
+  'character-vampire', 'column-large', 'pillar-large', 'pillar-square', 'pillar-obelisk', 'stone-wall',
+  'stone-wall-damaged', 'brick-wall', 'brick-wall-end', 'crypt-large', 'lightpost-double', 'hay-bale',
+  'pumpkin', 'lantern-candle', 'urn-round',
 ];
 
 export async function loadModels(names: string[] = MODEL_NAMES) {

@@ -94,3 +94,9 @@ Duração alvo: 8–12 min por fase.
 3. **Arte e áudio:** modelos e animações reais, cenário, música, efeitos.
 4. **Conteúdo:** 3 fases, chefe, balanceamento, polimento.
 5. **Publicação:** GitHub (conta pessoal) + Vercel.
+
+## 11. Estado atual (demo)
+- Fases implementadas: Cemitério da Vila, Floresta Sombria e Castelo em Ruínas (com arena do chefe).
+- Inimigos: zumbi, corredor, brutamontes, esqueleto arqueiro, cão-zumbi (modelo provisório), necromante menor.
+- Chefe: Carniçal Rei, 3 fases de luta (golpes de área e onda no chão; invoca zumbis abaixo de 66%; investida abaixo de 33%). Recompensa: pulo duplo.
+- Dificuldade alvo: desafiador mas justo (ainda precisa de teste humano e balanceamento).
