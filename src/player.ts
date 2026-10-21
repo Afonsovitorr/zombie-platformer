@@ -26,6 +26,7 @@ const STAGES: Stage[] = [
   { dur: 0.55, from: 0.26, to: 0.4, dmg: 1.6, reach: 2.3, kb: 1.8, lunge: 5, shake: 0.18 },
 ];
 
+const SWINGS = ['1H_Melee_Attack_Chop', '1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Slice_Horizontal'];
 const JUMP = 15;
 const DODGE_TIME = 0.28;
 const DODGE_COST = 25;
@@ -60,38 +61,12 @@ export class Player {
   private safe = { x: 0, y: 0.5 };
   private safeTimer = 0;
 
-  private actor = new Actor('character-keeper', 2.05);
+  private actor = new Actor('kk/kk_Knight', 2.1, { gear: ['1H_Sword', 'Round_Shield'] });
   private model = this.actor.root;
 
   constructor() {
-    this.attachGear();
     this.group.add(this.model);
   }
-
-  // Sword and shield are plain boxes parented to the arm nodes, so they follow every animation.
-  // The arm bone points along its local x axis, so the blade continues that axis past the hand.
-  private attachGear() {
-    const u = 1 / this.actor.scale; // raw model units per world unit
-    const armR = this.actor.node('arm-right');
-    const armL = this.actor.node('arm-left');
-
-    const sword = new THREE.Group();
-    const blade = box(1.0 * u, 0.07 * u, 0.12 * u, 0xdfe6ee, 0x223344);
-    blade.position.x = -0.5 * u;
-    const guard = box(0.05 * u, 0.09 * u, 0.4 * u, 0x8a6d3b);
-    guard.position.x = -0.02 * u;
-    const grip = box(0.28 * u, 0.06 * u, 0.06 * u, 0x4a3320);
-    grip.position.x = 0.14 * u;
-    sword.add(blade, guard, grip);
-    sword.position.set(-0.25, 0, 0);
-    armR?.add(sword);
-
-    const shield = new THREE.Group();
-    shield.add(box(0.08 * u, 0.8 * u, 0.62 * u, 0x6b3f2a), box(0.1 * u, 0.2 * u, 0.2 * u, 0xc9a24b));
-    shield.position.set(0.3, 0, 0);
-    armL?.add(shield);
-  }
-
 
   get maxHp() {
     return this.stats.maxHp;
@@ -369,30 +344,30 @@ export class Player {
     const moving = Math.abs(b.vx);
     switch (this.state) {
       case 'dead':
-        a.play('die', { once: true });
+        a.play('Death_A', { once: true });
         break;
       case 'attack': {
         const st = STAGES[this.stage];
-        a.play(this.stage === 1 ? 'attack-melee-left' : 'attack-melee-right', { fit: st.dur, restart: this.t < dt * 1.5 });
+        a.play(SWINGS[this.stage], { fit: st.dur, restart: this.t < dt * 1.5, fade: 0.06 });
         break;
       }
       case 'plunge':
-        a.play('fall');
+        a.play('Jump_Idle');
         break;
       case 'dodge':
-        a.play('sprint', { speed: 1.6 });
+        a.play('Dodge_Forward', { fit: DODGE_TIME, fade: 0.05 });
         break;
       case 'hurt':
-        a.play('emote-no', { fit: 0.35 });
+        a.play('Hit_A', { fit: 0.35 });
         break;
       case 'block':
-        a.play('holding-left');
+        a.play('Blocking');
         break;
       default:
-        if (!b.onGround) a.play(b.vy > 0 ? 'jump' : 'fall');
-        else if (moving > 5) a.play('sprint', { speed: moving / this.stats.runSpeed });
-        else if (moving > 0.5) a.play('walk', { speed: Math.max(0.8, moving / 2) });
-        else a.play('idle');
+        if (!b.onGround) a.play('Jump_Idle');
+        else if (moving > 5) a.play('Running_A', { speed: Math.max(0.8, moving / this.stats.runSpeed) });
+        else if (moving > 0.5) a.play('Walking_A', { speed: Math.max(0.8, moving / 2) });
+        else a.play('Idle');
     }
     a.update(dt);
   }

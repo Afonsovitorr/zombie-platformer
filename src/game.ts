@@ -35,8 +35,9 @@ export class Game {
   private mode: Mode = 'menu';
   private renderer = new THREE.WebGLRenderer({ antialias: true });
   private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300);
-  private hemi = new THREE.HemisphereLight(0xffffff, 0x000000, 1.1);
+  private camera = new THREE.PerspectiveCamera(40, 1, 0.1, 900);
+  private sun = new THREE.DirectionalLight(0xffffff, 2.4);
+  private hemi = new THREE.HemisphereLight(0xffffff, 0x000000, 1.0);
   private input = new Input(document.getElementById('touch')!);
   private hud = new Hud();
   private menu = new Menu();
@@ -55,7 +56,7 @@ export class Game {
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 
     this.scene.add(this.hemi);
-    const moonLight = new THREE.DirectionalLight(0xdfe6ff, 1.6);
+    const moonLight = this.sun;
     moonLight.position.set(-6, 12, 10);
     this.scene.add(moonLight, this.player.group);
 
@@ -82,6 +83,7 @@ export class Game {
     const sky = new THREE.Color(th.sky);
     this.scene.background = sky;
     this.scene.fog = new THREE.Fog(sky, th.fog[0], th.fog[1]);
+    this.sun.color.setHex(th.sun);
     this.hemi.color.setHex(th.hemi[0]);
     this.hemi.groundColor.setHex(th.hemi[1]);
   }
@@ -392,6 +394,7 @@ export class Game {
       this.shake *= Math.exp(-9 * frameDt);
     }
 
+    for (const c of this.level.group.children) if (c.name === 'cloud') c.position.x += frameDt * 0.6;
     const pulse = 1 + Math.sin(now / 90) * 0.12;
     for (const f of this.flames) f.scale.set(pulse, 1 + (pulse - 1) * 2, pulse);
 

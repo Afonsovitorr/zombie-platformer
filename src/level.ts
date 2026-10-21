@@ -1,20 +1,24 @@
 import * as THREE from 'three';
 import type { Box } from './physics';
 import type { LevelDef } from './data/levels';
-import { cloneProp } from './models';
+import { cloneProp, aspect } from './models';
+import { toonMaterial } from './toon';
 
 export interface Theme {
-  sky: number;
+  sky: number; // horizon / fog colour
+  skyTop: number;
   fog: [near: number, far: number];
   hemi: [sky: number, ground: number];
+  sun: number;
   moon: number;
+  cloud: number;
   stone: boolean; // paved tops instead of grass
 }
 
 export const THEMES: Record<LevelDef['theme'], Theme> = {
-  cemetery: { sky: 0x14102a, fog: [25, 70], hemi: [0x8c9bd6, 0x2a1f33], moon: 0xe9e4c8, stone: false },
-  forest: { sky: 0x08171a, fog: [16, 55], hemi: [0x7fbfa8, 0x1a2a22], moon: 0xcfe6d8, stone: false },
-  castle: { sky: 0x1b0d14, fog: [22, 65], hemi: [0xb89098, 0x2a1418], moon: 0xe8a58f, stone: true },
+  cemetery: { sky: 0x7a64c4, skyTop: 0x2c2160, fog: [30, 90], hemi: [0xc2b4ff, 0x4a3a66], sun: 0xd8e0ff, moon: 0xfff2b8, cloud: 0xb9a8f0, stone: false },
+  forest: { sky: 0x3c9c86, skyTop: 0x0f3a3c, fog: [22, 75], hemi: [0xb0f4d8, 0x2c4a36], sun: 0xe0ffe8, moon: 0xeaffd8, cloud: 0x8fd8c0, stone: false },
+  castle: { sky: 0xc8566e, skyTop: 0x3a1534, fog: [28, 85], hemi: [0xffc8c0, 0x52283a], sun: 0xffdcc0, moon: 0xffd8a8, cloud: 0xe89aa8, stone: true },
 };
 
 export interface Level {
@@ -52,13 +56,13 @@ function canvasTexture(size: number, draw: (g: CanvasRenderingContext2D) => void
 function makeStoneTexture() {
   const rand = rng(3);
   return canvasTexture(128, (g) => {
-    g.fillStyle = '#2a2638';
+    g.fillStyle = '#4a4468';
     g.fillRect(0, 0, 128, 128);
     for (let row = 0; row < 4; row++) {
       const off = row % 2 ? 32 : 0;
       for (let col = -1; col < 3; col++) {
         const l = 52 + rand() * 14;
-        g.fillStyle = `hsl(255 ${12 + rand() * 8}% ${l * 0.62}%)`;
+        g.fillStyle = `hsl(${248 + rand() * 20} ${22 + rand() * 12}% ${l * 0.85}%)`;
         g.fillRect(col * 64 + off + 2, row * 32 + 2, 60, 28);
       }
     }
@@ -68,10 +72,10 @@ function makeStoneTexture() {
 function makeGrassTexture() {
   const rand = rng(11);
   return canvasTexture(128, (g) => {
-    g.fillStyle = '#2f5d3a';
+    g.fillStyle = '#3f8a4a';
     g.fillRect(0, 0, 128, 128);
     for (let i = 0; i < 260; i++) {
-      g.fillStyle = `hsl(${120 + rand() * 25} ${35 + rand() * 20}% ${16 + rand() * 16}%)`;
+      g.fillStyle = `hsl(${100 + rand() * 40} ${45 + rand() * 25}% ${26 + rand() * 20}%)`;
       g.fillRect(rand() * 128, rand() * 128, 2 + rand() * 4, 2 + rand() * 6);
     }
   });
@@ -92,7 +96,7 @@ export function buildLevel(def: LevelDef): Level {
     const t = base.clone();
     t.repeat.set(repX, repY);
     t.needsUpdate = true;
-    return new THREE.MeshStandardMaterial({ map: t, flatShading: true, roughness: 1 });
+    return toonMaterial(t);
   };
   for (const s of solids) {
     const w = s.x1 - s.x0;
@@ -153,30 +157,65 @@ export function buildLevel(def: LevelDef): Level {
     for (let x = first + 8; x < last; x += 18 + rand() * 6) place('lantern-candle', x, 0, -1.8, 1.2);
     for (let x = first + 14; x < last; x += 30 + rand() * 10) place('gravestone-cross-large', x, 0, -2.4, 2.0);
   } else {
-    // Castle ruins: broken walls, columns, braziers and a dead tree or two behind.
-    for (let x = first - 4; x < last + 6; x += 4.2) {
-      place(pick(['stone-wall', 'stone-wall-damaged', 'brick-wall']), x, 0, -6.5, 3.5 + rand() * 1.5);
+    // Castle ruins (KayKit dungeon kit): a wall of arches and windows, columns, banners, torches, clutter.
+    const wallH = 5;
+    const step = aspect('kk/dg_wall') * wallH;
+    const walls = ['kk/dg_wall', 'kk/dg_wall_arched', 'kk/dg_wall_window_open', 'kk/dg_wall_broken', 'kk/dg_wall', 'kk/dg_wall_cracked'];
+    for (let x = first - 4; x < last + 8; x += step) place(pick(walls), x + step / 2, 0, -6.5, wallH);
+    for (let x = first + 6; x < last; x += 14 + rand() * 5) place('kk/dg_column', x, 0, -4.2, 5.5 + rand());
+    for (let x = first + 9; x < last; x += 19 + rand() * 5) {
+      place(pick(['kk/dg_banner_patternA_red', 'kk/dg_banner_thin_red', 'kk/dg_banner_shield_red', 'kk/dg_banner_patternB_red']), x, 1.4, -6.1, 3.2);
     }
-    for (let x = first + 4; x < last; x += 16 + rand() * 4) place(pick(['column-large', 'pillar-large']), x, 0, -5.5, 5 + rand() * 1.5);
-    for (let x = first + 9; x < last; x += 17 + rand() * 6) place(pick(['pillar-square', 'pillar-obelisk', 'urn-round']), x, 0, -2.4, 2.2);
-    for (let x = first + 25; x < last; x += 32) place('crypt-large', x, 0, -11, 9);
-    for (let x = first; x < last; x += 22) place(pick(['pine-fall', 'pine-crooked']), x + rand() * 6, 0, -9 - rand() * 6, 6);
-    for (let x = first + 5; x < last; x += 11) {
-      if (def.checkpoints.some((c) => Math.abs(c - x) < 5)) continue;
-      place('fire-basket', x, 0, -1.6, 1.0);
-      const f = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.8, 5), flameMat);
-      f.position.set(x, 1.1, -1.6);
+    for (let x = first + 3; x < last; x += 9) {
+      if (def.checkpoints.some((c) => Math.abs(c - x) < 4)) continue;
+      place('kk/dg_torch_mounted', x, 2.4, -6.1, 1.3);
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 5), flameMat);
+      f.position.set(x, 3.95, -6.0);
       f.name = 'flame';
       group.add(f);
     }
+    for (let x = first + 5; x < last; x += 6 + rand() * 5) {
+      if (rand() < 0.35) continue;
+      place(pick(['kk/dg_barrel_large', 'kk/dg_barrel_small_stack', 'kk/dg_crates_stacked', 'kk/dg_box_stacked', 'kk/dg_rubble_large', 'kk/dg_rubble_half', 'kk/dg_keg']), x, 0, -2.4 - rand() * 0.8, 1.4 + rand() * 0.7, rand() * 6);
+    }
+    for (let x = first + 30; x < last; x += 45) place(pick(['kk/dg_chest', 'kk/dg_chest_gold']), x, 0, -2.0, 1.0);
+    for (let x = first; x < last + 8; x += 20) place('kk/dg_wall_arched', x + 6, 0, -13, 10);
   }
 
-  const moon = new THREE.Mesh(
-    new THREE.SphereGeometry(5, 16, 12),
-    new THREE.MeshBasicMaterial({ color: theme.moon, fog: false }),
+  // Sky dome: a vertical gradient from the horizon colour up to a darker zenith.
+  const mid = (first + last) / 2;
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(400, 24, 12),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      uniforms: { top: { value: new THREE.Color(theme.skyTop) }, bottom: { value: new THREE.Color(theme.sky) } },
+      vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: 'uniform vec3 top; uniform vec3 bottom; varying float h; void main(){ gl_FragColor = vec4(mix(bottom, top, smoothstep(0.0, 0.55, h)), 1.0); }',
+    }),
   );
-  moon.position.set((first + last) / 2, 26, -90);
+  dome.position.set(mid, 0, 0);
+  dome.renderOrder = -1;
+  group.add(dome);
+
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(7, 20, 14), new THREE.MeshBasicMaterial({ color: theme.moon, fog: false }));
+  moon.position.set(mid + 25, 30, -150);
   group.add(moon);
+
+  // Soft toon clouds that drift slowly across the sky.
+  const cloudMat = toonMaterial(null, theme.cloud);
+  for (let i = 0; i < 16; i++) {
+    const cloud = new THREE.Group();
+    cloud.name = 'cloud';
+    for (let p = 0; p < 4; p++) {
+      const puff = new THREE.Mesh(new THREE.IcosahedronGeometry(2.2 + rand() * 2.2, 1), cloudMat);
+      puff.position.set((p - 1.5) * 3.2, rand() * 1.2, rand() * 2);
+      puff.scale.y = 0.65;
+      cloud.add(puff);
+    }
+    cloud.position.set(first - 60 + rand() * (last - first + 120), 16 + rand() * 22, -80 - rand() * 60);
+    group.add(cloud);
+  }
 
   // Campfires (checkpoints)
   for (const x of def.checkpoints) {
@@ -213,7 +252,7 @@ export function buildLevel(def: LevelDef): Level {
       group.add(wall);
       arenaMeshes.push(wall);
     }
-    for (const x of [a0 + 3, a1 - 3]) place('pillar-large', x, 0, -2.6, 7);
+    for (const x of [a0 + 3, a1 - 3]) place('kk/dg_column', x, 0, -2.6, 7);
   }
 
   return { def, group, solids, theme, goal, arenaWalls, arenaMeshes };

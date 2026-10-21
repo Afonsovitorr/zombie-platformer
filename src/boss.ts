@@ -4,6 +4,7 @@ import type { Game } from './game';
 import type { EnemyDef } from './data/enemies';
 import type { Foe } from './foe';
 import { Actor } from './actor';
+import { toonMaterial } from './toon';
 import { Enemy } from './enemy';
 
 type State = 'dormant' | 'idle' | 'windup' | 'attack' | 'recover' | 'stun' | 'dead';
@@ -40,16 +41,18 @@ export class Boss implements Foe {
   private forceNext: Atk | null = null;
   private actor: Actor;
   private model: THREE.Group;
+  private crown: THREE.Object3D;
+  private headPos = new THREE.Vector3();
 
   constructor(readonly def: EnemyDef, x: number) {
     this.hp = def.hp;
     this.body = { x, y: 0.05, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
-    this.actor = new Actor(def.model, def.h * 1.15, def.tint);
+    this.actor = new Actor(def.model, def.h * 1.15, { tint: def.tint, hue: def.hue, sat: def.sat, light: def.light, gear: def.gear, props: def.props, hide: def.hide });
     this.model = this.actor.root;
     this.group.add(this.model);
 
-    const crownMat = new THREE.MeshStandardMaterial({ color: 0xffc83d, emissive: 0x6b4a00, flatShading: true });
-    const crown = new THREE.Group();
+    const crownMat = toonMaterial(null, 0xffc83d, { emissive: 0x6b4a00 });
+    const crown = new THREE.Group(); // follows the head bone; see update()
     const band = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.34), crownMat);
     crown.add(band);
     for (const [px, pz] of [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12], [0, 0]] as const) {
@@ -57,8 +60,9 @@ export class Boss implements Foe {
       spike.position.set(px, 0.1, pz);
       crown.add(spike);
     }
-    crown.position.y = 0.4;
-    this.actor.node('head')?.add(crown);
+    crown.scale.setScalar(this.actor.scale * 1.9);
+    this.crown = crown;
+    this.group.add(crown);
   }
 
   get dead() {
@@ -246,31 +250,35 @@ export class Boss implements Foe {
 
   private animate(dt: number) {
     const a = this.actor;
+    const [wind, act] = TIMES[this.atk];
     switch (this.state) {
       case 'dormant':
       case 'recover':
-        a.play('idle');
+        a.play('2H_Melee_Idle');
         break;
       case 'idle':
-        a.play(Math.abs(this.body.vx) > 0.2 ? 'walk' : 'idle', { speed: this.phase === 3 ? 1.5 : 1 });
+        a.play(Math.abs(this.body.vx) > 0.2 ? 'Walking_B' : '2H_Melee_Idle', { speed: this.phase === 3 ? 1.5 : 1 });
         break;
       case 'windup':
-        a.play(this.atk === 'swipe' ? 'holding-right' : 'holding-both', { fade: 0.15 });
-        break;
       case 'attack':
-        if (this.atk === 'slam') a.play('attack-melee-right', { fit: 0.35 });
-        else if (this.atk === 'swipe') a.play('attack-melee-left', { fit: 0.3 });
-        else if (this.atk === 'charge') a.play('sprint', { speed: 1.4 });
-        else a.play('holding-both-shoot');
+        if (this.atk === 'slam') a.play('2H_Melee_Attack_Chop', { fit: (wind + act) * 1.15, fade: 0.15 });
+        else if (this.atk === 'swipe') a.play('2H_Melee_Attack_Slice', { fit: (wind + act) * 1.15, fade: 0.15 });
+        else if (this.atk === 'charge') a.play(this.state === 'windup' ? '2H_Melee_Idle' : 'Running_A', { speed: 1.2 });
+        else a.play('Spellcast_Raise', { fit: wind + act });
         break;
       case 'stun':
-        a.play('crouch');
+        a.play('Sit_Floor_Idle');
         break;
       case 'dead':
-        a.play('die', { once: true });
+        a.play('Death_A', { once: true });
         break;
     }
     a.update(dt);
+    const head = a.node('head');
+    if (head) {
+      head.getWorldPosition(this.headPos);
+      this.crown.position.set(this.headPos.x - this.group.position.x, this.headPos.y - this.group.position.y + 1.7, 0);
+    }
   }
 
   private go(s: State) {

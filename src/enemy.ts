@@ -35,7 +35,7 @@ export class Enemy implements Foe {
   constructor(readonly def: EnemyDef, x: number, y = 0.05, public summoned = false, readonly owner?: Foe) {
     this.hp = def.hp;
     this.body = { x, y, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
-    this.actor = new Actor(def.model, def.h * 1.15, def.tint);
+    this.actor = new Actor(def.model, def.h * 1.15, { tint: def.tint, hue: def.hue, sat: def.sat, light: def.light, gear: def.gear, props: def.props, hide: def.hide });
     this.model = this.actor.root;
     this.group.add(this.model);
     if (summoned) this.rise = RISE_TIME;
@@ -73,10 +73,9 @@ export class Enemy implements Foe {
     if (this.rise > 0) {
       this.rise -= dt;
       b.vx = 0;
-      this.model.position.y = -(Math.max(0, this.rise) / RISE_TIME) * this.def.h * 1.2;
+      this.actor.play(this.actor.has('Spawn_Ground') ? 'Spawn_Ground' : 'Idle', { fit: RISE_TIME, once: true });
       moveBody(b, dt, g.level.solids);
       this.group.position.set(b.x, b.y, 0);
-      this.actor.play('idle');
       this.actor.update(dt);
       return;
     }
@@ -303,31 +302,33 @@ export class Enemy implements Foe {
     const a = this.actor;
     const d = this.def;
     const k = d.kind;
+    const swing = (d.windup + d.active) * 1.15; // one attack clip spans the telegraph and the blow
+    const punch = d.id === 'brute' ? 'Unarmed_Melee_Attack_Punch_B' : 'Unarmed_Melee_Attack_Punch_A';
     switch (this.state) {
       case 'idle':
       case 'recover':
-        a.play('idle');
+        a.play('Idle');
         break;
       case 'chase':
-        if (k === 'necro') a.play(Math.abs(this.body.vx) > 0.1 ? 'walk' : 'idle');
-        else a.play(d.speed > 4 ? 'sprint' : 'walk', { speed: Math.max(0.6, d.speed / 2.6) });
+        if (k === 'necro') a.play(Math.abs(this.body.vx) > 0.1 ? 'Walking_A' : 'Idle');
+        else if (d.speed > 4) a.play('Running_B', { speed: d.speed / 5 });
+        else a.play('Walking_B', { speed: Math.max(0.7, d.speed / 2.2) });
         break;
       case 'windup':
-        a.play(k === 'hound' ? 'crouch' : 'holding-both', { fade: 0.15 });
-        break;
       case 'attack':
-        if (k === 'archer' || k === 'necro') a.play('holding-both-shoot');
-        else if (k === 'hound') a.play('jump');
-        else a.play('attack-melee-right', { fit: d.active + 0.1 });
+        if (k === 'archer') a.play('1H_Ranged_Shoot', { fit: swing, fade: 0.15 });
+        else if (k === 'necro') a.play(this.state === 'windup' ? 'Spellcast_Raise' : 'Spellcast_Summon', { fit: swing, fade: 0.15 });
+        else if (k === 'hound') a.play(this.state === 'windup' ? 'Jump_Start' : 'Jump_Idle', { fade: 0.1 });
+        else a.play(punch, { fit: swing, fade: 0.12 });
         break;
       case 'hurt':
-        a.play('fall', { fit: 0.4 });
+        a.play('Hit_A', { fit: 0.4 });
         break;
       case 'stun':
-        a.play('crouch');
+        a.play('Sit_Floor_Idle');
         break;
       case 'dead':
-        a.play('die', { once: true });
+        a.play('Death_A', { once: true });
         break;
     }
     a.update(dt);
