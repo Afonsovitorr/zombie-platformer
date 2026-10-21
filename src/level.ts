@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Box } from './physics';
 import type { LevelDef } from './data/levels';
+import { cloneProp } from './models';
 
 export interface Level {
   def: LevelDef;
@@ -41,35 +42,33 @@ export function buildLevel(def: LevelDef): Level {
   const last = Math.max(...def.ground.map((g) => g[1]));
 
   // Background decor at several depths: tombstones and dead trees.
-  const tomb = mat(0x6b6880);
-  const wood = mat(0x2a2024);
-  for (let x = first; x < last + 5; x += 2.2) {
-    const z = -2.5 - rand() * 9;
-    const kind = rand();
-    if (kind < 0.45) {
-      const g = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3 + rand() * 0.8, 0.3), tomb);
-      g.position.set(x + rand(), 0.7, z);
-      g.rotation.z = (rand() - 0.5) * 0.25;
-      group.add(g);
-    } else if (kind < 0.8) {
-      const h = 3 + rand() * 3;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.3, h, 5), wood);
-      trunk.position.set(x, h / 2, z);
-      const branch = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.14, 0.14), wood);
-      branch.position.set(x + 0.6, h * 0.7, z);
-      branch.rotation.z = 0.5;
-      group.add(trunk, branch);
-    }
-  }
+  const place = (name: string, x: number, y: number, z: number, height: number, rotY = 0) => {
+    const p = cloneProp(name, height);
+    p.position.set(x, y, z);
+    p.rotation.y = rotY;
+    group.add(p);
+    return p;
+  };
+  const pick = <T,>(list: T[]) => list[Math.floor(rand() * list.length)];
 
-  // Foreground silhouettes give depth against the camera.
-  const dark = mat(0x0d0b14);
-  for (let x = first; x < last; x += 17 + rand() * 8) {
-    const h = 6 + rand() * 4;
-    const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.9, h, 0.9), dark);
-    pillar.position.set(x, h / 2 - 1, 6);
-    group.add(pillar);
+  // Mid-ground (just behind the gameplay plane): graves, crosses, fences.
+  const graves = ['gravestone-bevel', 'gravestone-broken', 'gravestone-cross', 'gravestone-round', 'gravestone-wide', 'gravestone-decorative', 'cross', 'cross-wood'];
+  for (let x = first; x < last + 5; x += 3.2) {
+    if (rand() < 0.3) continue;
+    place(pick(graves), x + rand() * 2, 0, -2.3 - rand() * 1.2, 1.2 + rand() * 0.7, (rand() - 0.5) * 0.6);
   }
+  for (let x = first + 2; x < last; x += 12 + rand() * 6) {
+    place(pick(['fence', 'fence-damaged', 'iron-fence', 'iron-fence-damaged']), x, 0, -1.6, 1.3);
+    place('fence', x + 2, 0, -1.6, 1.3);
+  }
+  for (let x = first + 6; x < last; x += 15 + rand() * 6) place('lightpost-single', x, 0, -1.8, 3.4);
+
+  // Far background: trees and the odd crypt, increasingly buried in fog.
+  for (let x = first - 6; x < last + 10; x += 2.6) {
+    const z = -5 - rand() * 14;
+    place(pick(['pine', 'pine-crooked', 'pine-fall']), x + rand() * 2, 0, z, 4 + rand() * 4);
+  }
+  for (let x = first + 20; x < last; x += 38) place(pick(['crypt', 'crypt-small']), x, 0, -9, 5);
 
   const moon = new THREE.Mesh(
     new THREE.SphereGeometry(5, 16, 12),
@@ -79,18 +78,13 @@ export function buildLevel(def: LevelDef): Level {
   group.add(moon);
 
   // Campfires (checkpoints)
-  const log = mat(0x4a2f1c);
   const flame = mat(0xff9a2e, { emissive: 0xff6a00, emissiveIntensity: 1.2 });
   for (const x of def.checkpoints) {
-    const a = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.18, 0.18), log);
-    a.position.set(x, 0.12, 0);
-    a.rotation.z = 0.25;
-    const b = a.clone();
-    b.rotation.z = -0.25;
-    const f = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 5), flame);
-    f.position.set(x, 0.6, 0);
+    place('fire-basket', x, 0, 0, 1.0);
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.8, 5), flame);
+    f.position.set(x, 1.1, 0);
     f.name = 'flame';
-    group.add(a, b, f);
+    group.add(f);
   }
 
   const pole = new THREE.Mesh(new THREE.BoxGeometry(0.2, 5, 0.2), mat(0xcccccc));

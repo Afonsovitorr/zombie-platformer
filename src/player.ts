@@ -4,6 +4,7 @@ import type { Input } from './input';
 import type { Game } from './game';
 import type { Enemy } from './enemy';
 import { BASE_STATS, Stats } from './data/skills';
+import { Actor } from './actor';
 
 type State = 'free' | 'attack' | 'block' | 'dodge' | 'hurt' | 'plunge' | 'dead';
 
@@ -60,46 +61,35 @@ export class Player {
   private safe = { x: 0, y: 0.5 };
   private safeTimer = 0;
 
-  private model = new THREE.Group();
-  private legL = new THREE.Group();
-  private legR = new THREE.Group();
-  private swordArm = new THREE.Group();
-  private shield = new THREE.Group();
+  private actor = new Actor('character-keeper', 1.85);
+  private model = this.actor.root;
 
   constructor() {
-    const torso = box(0.7, 0.8, 0.45, 0x8a8f9c);
-    torso.position.y = 1.0;
-    const head = box(0.5, 0.5, 0.5, 0xe0b48c);
-    head.position.y = 1.7;
-    const helm = box(0.56, 0.28, 0.56, 0x6c7280);
-    helm.position.y = 1.88;
-    const plume = box(0.12, 0.3, 0.12, 0xc0392b);
-    plume.position.y = 2.15;
-
-    for (const [leg, z] of [[this.legL, 0.15], [this.legR, -0.15]] as const) {
-      leg.position.set(0, 0.62, z);
-      const m = box(0.26, 0.62, 0.26, 0x4a3b2e);
-      m.position.y = -0.31;
-      leg.add(m);
-    }
-
-    this.swordArm.position.set(0.1, 1.3, -0.3);
-    const arm = box(0.2, 0.6, 0.2, 0x8a8f9c);
-    arm.position.y = -0.3;
-    const blade = box(0.12, 1.1, 0.06, 0xdfe6ee, 0x223344);
-    blade.position.y = -1.15;
-    const guard = box(0.4, 0.1, 0.12, 0x8a6d3b);
-    guard.position.y = -0.62;
-    this.swordArm.add(arm, guard, blade);
-
-    this.shield.position.set(-0.05, 1.05, 0.38);
-    const plate = box(0.1, 0.8, 0.6, 0x6b3f2a);
-    const rim = box(0.14, 0.2, 0.2, 0xc9a24b);
-    this.shield.add(plate, rim);
-
-    this.model.add(torso, head, helm, plume, this.legL, this.legR, this.swordArm, this.shield);
+    this.attachGear();
     this.group.add(this.model);
   }
+
+  // Sword and shield are plain boxes parented to the arm nodes, so they follow every animation.
+  private attachGear() {
+    const u = 1 / this.actor.scale; // raw model units per world unit
+    const armR = this.actor.node('arm-right');
+    const armL = this.actor.node('arm-left');
+
+    const sword = new THREE.Group();
+    const blade = box(0.09 * u, 0.06 * u, 0.95 * u, 0xdfe6ee, 0x223344);
+    blade.position.z = 0.55 * u;
+    const guard = box(0.09 * u, 0.3 * u, 0.08 * u, 0x8a6d3b);
+    guard.position.z = 0.05 * u;
+    sword.add(blade, guard);
+    sword.position.set(-0.27, 0, 0);
+    armR?.add(sword);
+
+    const shield = new THREE.Group();
+    shield.add(box(0.06 * u, 0.55 * u, 0.5 * u, 0x6b3f2a), box(0.08 * u, 0.15 * u, 0.15 * u, 0xc9a24b));
+    shield.position.set(0.28, 0, 0.12 * u);
+    armL?.add(shield);
+  }
+
 
   get maxHp() {
     return this.stats.maxHp;
@@ -203,7 +193,7 @@ export class Player {
       if (this.hp <= 0) this.die();
     }
 
-    this.animate(inp);
+    this.animate(dt);
   }
 
   private setState(s: State) {
@@ -364,7 +354,7 @@ export class Player {
     this.setState('dead');
   }
 
-  private animate(inp: Input) {
+  private animate(dt: number) {
     const b = this.body;
     const targetRot = this.facing > 0 ? 0 : Math.PI;
     this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.35;
@@ -373,28 +363,36 @@ export class Player {
     // blink while invulnerable (except dodge, which gets a ghost look)
     this.model.visible = this.invuln <= 0 || this.state === 'dodge' || Math.floor(this.t * 20 + this.invuln * 20) % 2 === 0;
 
-    const speed = Math.abs(b.vx) / this.stats.runSpeed;
-    const swing = b.onGround ? Math.sin(performance.now() / 70) * speed * 0.9 : 0.5;
-    this.legL.rotation.z = swing;
-    this.legR.rotation.z = -swing;
-
-    let sword = 0.35;
-    if (this.state === 'attack') {
-      const st = STAGES[this.stage];
-      const p = Math.min(1, this.t / (st.dur * 0.6));
-      const e = 1 - (1 - p) * (1 - p);
-      sword = st.swing[0] + (st.swing[1] - st.swing[0]) * e;
-    } else if (this.state === 'plunge') {
-      sword = 0;
+    const a = this.actor;
+    const moving = Math.abs(b.vx);
+    switch (this.state) {
+      case 'dead':
+        a.play('die', { once: true });
+        break;
+      case 'attack': {
+        const st = STAGES[this.stage];
+        a.play('attack-melee-right', { fit: st.dur, restart: this.t < dt * 1.5 });
+        break;
+      }
+      case 'plunge':
+        a.play('fall');
+        break;
+      case 'dodge':
+        a.play('sprint', { speed: 1.6 });
+        break;
+      case 'hurt':
+        a.play('emote-no', { fit: 0.35 });
+        break;
+      case 'block':
+        a.play('holding-left');
+        break;
+      default:
+        if (!b.onGround) a.play(b.vy > 0 ? 'jump' : 'fall');
+        else if (moving > 5) a.play('sprint', { speed: moving / this.stats.runSpeed });
+        else if (moving > 0.5) a.play('walk', { speed: Math.max(0.8, moving / 2) });
+        else a.play('idle');
     }
-    this.swordArm.rotation.z = sword;
-
-    const blocking = this.state === 'block' || (inp.held.block && this.state === 'free');
-    this.shield.position.x = blocking ? 0.55 : -0.05;
-    this.shield.position.z = blocking ? 0.0 : 0.38;
-    this.model.position.y = this.state === 'dodge' ? -0.25 : 0;
-    this.model.rotation.z = this.state === 'dodge' ? -0.5 : 0;
-    this.group.rotation.z = this.state === 'dead' ? (-Math.PI / 2) * this.facing : 0;
+    a.update(dt);
   }
 }
 

@@ -13,24 +13,24 @@ export interface EnemyDef {
   active: number;
   recover: number;
   souls: number;
-  skin: number;
-  cloth: number;
+  model: string; // glb in public/models
+  tint?: number; // multiplied over the model's texture to tell variants apart
 }
 
 export const ENEMIES: Record<string, EnemyDef> = {
   walker: {
     id: 'walker', name: 'Zumbi', hp: 3, speed: 2.4, damage: 1, w: 0.9, h: 1.8, scale: 1,
     detect: 10, reach: 1.5, windup: 0.55, active: 0.2, recover: 0.5, souls: 10,
-    skin: 0x6f8f55, cloth: 0x4c5a3c,
+    model: 'character-zombie',
   },
   runner: {
     id: 'runner', name: 'Zumbi corredor', hp: 2, speed: 5, damage: 1, w: 0.8, h: 1.7, scale: 0.95,
     detect: 12, reach: 1.4, windup: 0.3, active: 0.2, recover: 0.45, souls: 15,
-    skin: 0x93a35e, cloth: 0x6a4a2a,
+    model: 'character-zombie', tint: 0xffd88a,
   },
   brute: {
     id: 'brute', name: 'Brutamontes', hp: 8, speed: 1.6, damage: 2, w: 1.3, h: 2.5, scale: 1.4,
     detect: 9, reach: 2.1, windup: 0.85, active: 0.25, recover: 0.8, souls: 40,
-    skin: 0x5a7a6a, cloth: 0x3a2f3f,
+    model: 'character-zombie', tint: 0x8fa3c4,
   },
 };

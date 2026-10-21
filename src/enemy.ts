@@ -2,13 +2,11 @@ import * as THREE from 'three';
 import { Body, moveBody, sign } from './physics';
 import type { Game } from './game';
 import type { EnemyDef } from './data/enemies';
+import { Actor } from './actor';
 
 type State = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'hurt' | 'stun' | 'dead';
 
 const STUN_TIME = 1.4;
-
-const box = (w: number, h: number, d: number, color: number) =>
-  new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1 }));
 
 export class Enemy {
   body: Body;
@@ -20,31 +18,14 @@ export class Enemy {
   private state: State = 'idle';
   private t = 0;
   private struck = false;
-  private model = new THREE.Group();
-  private arms = new THREE.Group();
-  private skin: THREE.MeshStandardMaterial;
+  private actor: Actor;
+  private model: THREE.Group;
 
   constructor(readonly def: EnemyDef, x: number) {
     this.hp = def.hp;
-    this.body = { x, y: 1, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
-    this.skin = new THREE.MeshStandardMaterial({ color: def.skin, flatShading: true, roughness: 1 });
-
-    const torso = box(0.75, 0.9, 0.45, def.cloth);
-    torso.position.y = 1.05;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), this.skin);
-    head.position.set(0.1, 1.75, 0);
-    const eye = box(0.08, 0.08, 0.52, 0xff3b30);
-    eye.position.set(0.28, 1.8, 0);
-    const legs = box(0.6, 0.65, 0.4, 0x3b3a30);
-    legs.position.y = 0.33;
-    this.arms.position.set(0.2, 1.4, 0);
-    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.18, 0.18), this.skin);
-    armL.position.set(0.4, 0, 0.25);
-    const armR = armL.clone();
-    armR.position.z = -0.25;
-    this.arms.add(armL, armR);
-    this.model.add(torso, head, eye, legs, this.arms);
-    this.model.scale.setScalar(def.scale);
+    this.body = { x, y: 0.05, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
+    this.actor = new Actor(def.model, def.h * 1.05, def.tint);
+    this.model = this.actor.root;
     this.group.add(this.model);
   }
 
@@ -67,7 +48,7 @@ export class Enemy {
     this.body.vx = dir * 6 * heavy * kb;
     this.body.vy = 4 * heavy;
     this.go(this.hp <= 0 ? 'dead' : 'hurt');
-    this.skin.emissive.setHex(0xffffff);
+    this.actor.setEmissive(0xffffff);
     g.audio.play(this.hp <= 0 ? 'death' : kb > 1.5 ? 'heavy' : 'hit');
     if (this.hp <= 0) g.onKill(this.def);
   }
@@ -80,7 +61,7 @@ export class Enemy {
     const dx = p.body.x - b.x;
     const dy = p.body.y - b.y;
     const near = Math.abs(dx) < d.detect && Math.abs(dy) < 3.5 && p.alive;
-    this.skin.emissive.lerp(new THREE.Color(0), 0.3);
+    this.actor.fadeEmissive(0.3);
 
     switch (this.state) {
       case 'idle':
@@ -98,7 +79,7 @@ export class Enemy {
         break;
       case 'windup':
         b.vx = 0;
-        this.skin.emissive.setHex(0x661111);
+        this.actor.setEmissive(0x661111);
         if (this.t > d.windup) this.go('attack');
         break;
       case 'attack':
@@ -121,12 +102,12 @@ export class Enemy {
         break;
       case 'stun':
         b.vx = 0;
-        this.skin.emissive.setHex(0x2244aa);
+        this.actor.setEmissive(0x2244aa);
         if (this.t > STUN_TIME) this.go('chase');
         break;
       case 'dead':
         b.vx *= 0.9;
-        if (this.t > 1.2) this.remove = true;
+        if (this.t > 1.6) this.remove = true;
         break;
     }
 
@@ -136,13 +117,39 @@ export class Enemy {
     this.group.position.set(b.x, b.y, 0);
     const targetRot = this.facing > 0 ? 0 : Math.PI;
     this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.3;
-    const lean = this.state === 'windup' ? -0.35 : this.state === 'attack' ? 0.3 : this.state === 'stun' ? 0.25 : 0;
-    this.model.rotation.z += (lean - this.model.rotation.z) * 0.4;
-    this.arms.rotation.z = this.state === 'windup' ? 0.9 : this.state === 'attack' ? -0.5 : Math.sin(this.t * 6) * 0.08;
-    if (this.state === 'dead') {
-      this.group.rotation.z = Math.min(this.t * 6, 1.5) * -this.facing;
-      this.group.position.y -= Math.min(this.t * 2, 0.5) * 0.5;
+    this.animate(dt);
+  }
+
+  private animate(dt: number) {
+    const a = this.actor;
+    const d = this.def;
+    switch (this.state) {
+      case 'idle':
+        a.play('idle');
+        break;
+      case 'chase':
+        a.play(d.speed > 4 ? 'sprint' : 'walk', { speed: Math.max(0.6, d.speed / 2.6) });
+        break;
+      case 'windup':
+        a.play('holding-both', { fade: 0.15 });
+        break;
+      case 'attack':
+        a.play('attack-melee-right', { fit: d.active + 0.1 });
+        break;
+      case 'recover':
+        a.play('idle');
+        break;
+      case 'hurt':
+        a.play('fall', { fit: 0.4 });
+        break;
+      case 'stun':
+        a.play('crouch');
+        break;
+      case 'dead':
+        a.play('die', { once: true });
+        break;
     }
+    a.update(dt);
   }
 
   private go(s: State) {

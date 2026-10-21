@@ -173,7 +173,7 @@ export class Game {
     this.player.reset(startX, statsFor(this.save.data.skills));
     this.won = false;
     this.hud.message(null);
-    this.camera.position.set(startX, 4, 14);
+    this.camera.position.set(startX, 4, 12);
   }
 
   private resize() {
@@ -272,7 +272,7 @@ export class Game {
     const k = 1 - Math.exp(-5 * frameDt);
     cam.position.x += (tx - cam.position.x) * k;
     cam.position.y += (ty - cam.position.y) * k;
-    cam.position.z = 14;
+    cam.position.z = 12;
     cam.lookAt(cam.position.x, cam.position.y - 1.4, 0);
     if (this.shake > 0.001) {
       cam.position.x += (Math.random() - 0.5) * this.shake;
