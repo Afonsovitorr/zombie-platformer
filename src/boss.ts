@@ -233,7 +233,7 @@ export class Boss implements Foe {
         break;
       case 'summon':
         this.summonCd = 12;
-        for (const side of [-1, 1]) g.spawnEnemy('walker', g.clampToArena(b.x + side * 4.5), 0.05, this);
+        for (const side of [-1, 1]) g.spawnEnemy('walker', g.clampToArena(b.x + side * 4.5), b.y + 0.05, this);
         g.audio.play('growl');
         break;
     }

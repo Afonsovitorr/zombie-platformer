@@ -59,7 +59,7 @@ export interface Level {
   arenaGfx: Container[];
   chests: ChestObj[];
   secrets: SecretObj[];
-  update(camX: number, camY: number, dt: number): void;
+  update(camX: number, camY: number, dt: number, halfW: number, halfH: number): void;
   light(upTo: number | null): void; // campfires with an index up to this one are lit
   breakSecret(id: string): SecretObj | null;
   resizeSky(w: number, h: number): void;
@@ -288,35 +288,42 @@ function shade(color: number, k: number) {
 
 const CP = CELL * U; // pixels per grid cell
 
-// Strokes the exposed outline of a set of cells: merges neighbouring edge pieces into long lines.
-function outlineCells(g: Graphics, cells: Set<string>, rows: number, cols: number, cellPx: (c: number, r: number) => [number, number]) {
+// Strokes the exposed outline of a window of cells: merges neighbouring edge pieces into long lines.
+function outlineCells(g: Graphics, cells: Set<string>, win: Win, cellPx: (c: number, r: number) => [number, number]) {
   const has = (c: number, r: number) => cells.has(`${c},${r}`);
-  for (let r = 0; r <= rows; r++) {
-    let c = 0;
-    while (c < cols) {
+  for (let r = win.r0; r <= win.r1; r++) {
+    let c = win.c0;
+    while (c < win.c1) {
       // boundary r lies between row r-1 and row r; draw where exactly one side is filled
       const edge = (cc: number) => has(cc, r - 1) !== has(cc, r);
       if (!edge(c)) { c++; continue; }
       const c0 = c;
-      while (c < cols && edge(c)) c++;
+      while (c < win.c1 && edge(c)) c++;
       const [x0, y] = cellPx(c0, r);
       const [x1] = cellPx(c, r);
       g.moveTo(x0, y).lineTo(x1, y);
     }
   }
-  for (let c = 0; c <= cols; c++) {
-    let r = 0;
-    while (r < rows) {
+  for (let c = win.c0; c <= win.c1; c++) {
+    let r = win.r0;
+    while (r < win.r1) {
       const edge = (rr: number) => has(c - 1, rr) !== has(c, rr);
       if (!edge(r)) { r++; continue; }
       const r0 = r;
-      while (r < rows && edge(r)) r++;
+      while (r < win.r1 && edge(r)) r++;
       const [x, y0] = cellPx(c, r0);
       const [, y1] = cellPx(c, r);
       g.moveTo(x, y0).lineTo(x, y1);
     }
   }
   g.stroke(OL);
+}
+
+interface Win {
+  c0: number; // first column
+  c1: number; // one past the last column
+  r0: number;
+  r1: number;
 }
 
 function crackLines(g: Graphics, x: number, y: number, w: number, h: number, rand: () => number) {
@@ -475,33 +482,72 @@ export function buildLevel(def: LevelDef): Level {
   const flames: Container[] = [];
   const glows: Graphics[] = [];
 
+  // The terrain is drawn in chunks that are hidden when off screen (cheaper on tablets).
+  const CHW = 16;
+  const CHH = 12;
+  interface Chunk { node: Container; cave: Graphics; deco: Container; terrain: Graphics; win: Win; x0: number; x1: number; yTop: number; yBot: number }
+  const chunks: Chunk[] = [];
+  const chunkMap = new Map<string, Chunk>();
+  const chunkOf = (c: number, r: number) => {
+    const cc = Math.min(cols - 1, Math.max(0, c));
+    const rr = Math.min(rows - 1, Math.max(0, r));
+    const key = `${Math.floor(cc / CHW)},${Math.floor(rr / CHH)}`;
+    let k = chunkMap.get(key);
+    if (!k) {
+      const win: Win = { c0: Math.floor(cc / CHW) * CHW, c1: Math.min(cols, Math.floor(cc / CHW) * CHW + CHW), r0: Math.floor(rr / CHH) * CHH, r1: Math.min(rows, Math.floor(rr / CHH) * CHH + CHH) };
+      const node = new Container();
+      const cave = new Graphics();
+      const deco = new Container();
+      const terrain = new Graphics();
+      node.addChild(cave, deco, terrain);
+      k = { node, cave, deco, terrain, win, x0: win.c0 * CELL, x1: win.c1 * CELL, yTop: cellTopY(win.r0), yBot: cellTopY(win.r1) };
+      chunkMap.set(key, k);
+      chunks.push(k);
+      stage.addChild(node);
+    }
+    return k;
+  };
+  const rowOf = (y: number) => rows - 1 - Math.floor((y + def.yOffset) / CELL);
+
   const place = (g: Container, x: number, y: number, scale = 1) => {
     g.position.set(px(x), py(y));
     g.scale.set(scale);
-    stage.addChild(g);
+    chunkOf(Math.floor(x / CELL), rowOf(y)).deco.addChild(g);
     return g;
   };
 
-  // cave backdrop: empty cells that have rock somewhere above them
-  const cave = new Graphics();
+  // cave backdrop: every empty cell that is not open to the sky (flood-filled from the top), plus deep narrow canyons
+  const outdoor = new Set<string>();
+  {
+    const stack: [number, number][] = [];
+    for (let c = 0; c < cols; c++) stack.push([c, 0]);
+    while (stack.length) {
+      const [c, r] = stack.pop()!;
+      if (c < 0 || c >= cols || r < 0 || r >= rows || isBlock(c, r) || outdoor.has(`${c},${r}`)) continue;
+      outdoor.add(`${c},${r}`);
+      stack.push([c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]);
+    }
+  }
+  const canyon = (c: number, r: number) => {
+    let l = false;
+    let rr = false;
+    for (let i = 1; i <= 10; i++) {
+      if (!l && isBlock(c - i, r)) l = true;
+      if (!rr && isBlock(c + i, r)) rr = true;
+    }
+    return l && rr;
+  };
   const caveColor = def.theme === 'castle' ? 0x2c1a34 : def.theme === 'forest' ? 0x1d3a2e : 0x231a40;
-  for (let c = 0; c < cols; c++) {
-    let covered = false;
-    for (let r = 0; r < rows; r++) {
-      if (isBlock(c, r)) {
-        covered = true;
-        continue;
-      }
-      if (!covered) continue;
-      let c1 = c;
-      // extend only along the first column here; runs are merged by the next loop
-      void c1;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (isBlock(c, r)) continue;
+      if (outdoor.has(`${c},${r}`) && !canyon(c, r)) continue;
       const [x, y] = cellPx(c, r);
+      const cave = chunkOf(c, r).cave;
       cave.rect(x, y, CP + 1, CP + 1).fill({ color: caveColor });
       if ((c + r) % 2 === 0) cave.rect(x + 8, y + 10, CP - 16, 6).fill({ color: 0xffffff, alpha: 0.04 });
     }
   }
-  stage.addChild(cave);
 
   // surfaces for decor: cells of earth whose upper neighbour is open
   interface Run { x0: number; x1: number; y: number }
@@ -543,59 +589,68 @@ export function buildLevel(def: LevelDef): Level {
         place(torch(), x, run.y + 2.6);
         const f = flame(16, 38, 0xffa02e, 0xffe27a);
         f.position.set(px(x), py(run.y + 2.6) - 50);
-        stage.addChild(f);
+        chunkOf(Math.floor(x / CELL), rowOf(run.y + 2.6)).deco.addChild(f);
         flames.push(f);
       }
     }
     scatter(5, () => { const r = rand(); return r < 0.4 ? barrel() : r < 0.8 ? crate() : rock(30); });
   }
 
-  // terrain: earth fill, speckles, outline, grass / slab caps
+  // terrain: earth fill, speckles, outline, grass / slab caps (one chunk at a time)
   const earthCells = new Set<string>();
   for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (grid[r][c] === '#') earthCells.add(`${c},${r}`);
-  const terrain = new Graphics();
-  for (let r = 0; r < rows; r++) {
-    let c = 0;
-    while (c < cols) {
-      if (!isEarth(c, r)) { c++; continue; }
-      const c0 = c;
-      while (c < cols && isEarth(c, r)) c++;
-      const [x, y] = cellPx(c0, r);
-      terrain.rect(x, y, (c - c0) * CP, CP + 1).fill({ color: theme.earth });
-    }
-  }
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (!isEarth(c, r)) continue;
-      const [x, y] = cellPx(c, r);
-      if (theme.stone) {
-        terrain.moveTo(x, y + CP / 2).lineTo(x + CP, y + CP / 2).moveTo(x + (r % 2 ? CP * 0.3 : CP * 0.7), y).lineTo(x + (r % 2 ? CP * 0.3 : CP * 0.7), y + CP / 2).moveTo(x + (r % 2 ? CP * 0.7 : CP * 0.3), y + CP / 2).lineTo(x + (r % 2 ? CP * 0.7 : CP * 0.3), y + CP).stroke({ width: 2.5, color: theme.earthDark });
-      } else if (rand() < 0.7) {
-        terrain.ellipse(x + 20 + rand() * (CP - 40), y + 24 + rand() * (CP - 48), 5 + rand() * 8, 4 + rand() * 5).fill({ color: rand() < 0.5 ? theme.earthDark : 0xa07a58 });
+  for (let cr = 0; cr < rows; cr += CHH) {
+    for (let cc = 0; cc < cols; cc += CHW) {
+      const k = chunkOf(cc, cr);
+      const { win, terrain } = k;
+      for (let r = win.r0; r < win.r1; r++) {
+        let c = win.c0;
+        while (c < win.c1) {
+          if (!isEarth(c, r)) { c++; continue; }
+          const c0 = c;
+          while (c < win.c1 && isEarth(c, r)) c++;
+          const [x, y] = cellPx(c0, r);
+          terrain.rect(x, y, (c - c0) * CP + 1, CP + 1).fill({ color: theme.earth });
+        }
+      }
+      for (let r = win.r0; r < win.r1; r++) {
+        for (let c = win.c0; c < win.c1; c++) {
+          if (!isEarth(c, r)) continue;
+          const [x, y] = cellPx(c, r);
+          if (theme.stone) {
+            terrain.moveTo(x, y + CP / 2).lineTo(x + CP, y + CP / 2).moveTo(x + (r % 2 ? CP * 0.3 : CP * 0.7), y).lineTo(x + (r % 2 ? CP * 0.3 : CP * 0.7), y + CP / 2).moveTo(x + (r % 2 ? CP * 0.7 : CP * 0.3), y + CP / 2).lineTo(x + (r % 2 ? CP * 0.7 : CP * 0.3), y + CP).stroke({ width: 2.5, color: theme.earthDark });
+          } else if (rand() < 0.5) {
+            terrain.ellipse(x + 20 + rand() * (CP - 40), y + 24 + rand() * (CP - 48), 5 + rand() * 8, 4 + rand() * 5).fill({ color: rand() < 0.5 ? theme.earthDark : 0xa07a58 });
+          }
+        }
+      }
+      outlineCells(terrain, earthCells, win, cellPx);
+      // caps: grass (or slabs) on every surface that is open above
+      for (let r = Math.max(1, win.r0); r < win.r1; r++) {
+        let c = win.c0;
+        while (c < win.c1) {
+          const open = (c2: number) => isEarth(c2, r) && !isBlock(c2, r - 1);
+          if (!open(c)) { c++; continue; }
+          const c0 = c;
+          while (c < win.c1 && open(c)) c++;
+          const [x0, y] = cellPx(c0, r);
+          const W = (c - c0) * CP;
+          const capH = theme.stone ? 30 : 36;
+          const n = Math.max(1, Math.round(W / 26));
+          const ys: number[] = [];
+          for (let i = 0; i <= n; i++) ys.push(y + capH + (i % 2 ? 12 : 0) + (theme.stone ? 0 : rand() * 6));
+          const lower: number[] = [];
+          for (let i = 0; i <= n; i++) lower.push(x0 + (W * i) / n, ys[i]);
+          const back2: number[] = [];
+          for (let i = n; i >= 0; i--) back2.push(x0 + (W * i) / n, ys[i]);
+          terrain.poly([x0, y, x0 + W, y, ...back2]).fill({ color: theme.grass });
+          terrain.poly(lower, false).stroke(OL);
+          terrain.rect(x0 + 6, y + 5, W - 12, 7).fill({ color: theme.grassLight, alpha: 0.9 });
+          if (!theme.stone) for (let x = x0 + 20; x < x0 + W - 12; x += 34 + rand() * 40) terrain.poly([x, y, x + 5, y - 14, x + 10, y]).fill({ color: theme.grassLight }).stroke({ ...OL, width: 2.5 });
+        }
       }
     }
   }
-  outlineCells(terrain, earthCells, rows, cols, cellPx);
-  // caps
-  for (let r = 1; r < rows; r++) {
-    let c = 0;
-    while (c < cols) {
-      const open = (cc: number) => isEarth(cc, r) && !isBlock(cc, r - 1);
-      if (!open(c)) { c++; continue; }
-      const c0 = c;
-      while (c < cols && open(c)) c++;
-      const [x0, y] = cellPx(c0, r);
-      const W = (c - c0) * CP;
-      const capH = theme.stone ? 30 : 36;
-      const pts: number[] = [x0, y, x0 + W, y];
-      const n = Math.max(2, Math.round(W / 26));
-      for (let i = n; i >= 0; i--) pts.push(x0 + (W * i) / n, y + capH + (i % 2 ? 12 : 0) + (theme.stone ? 0 : rand() * 6));
-      terrain.poly(pts).fill({ color: theme.grass }).stroke(OL);
-      terrain.rect(x0 + 6, y + 5, W - 12, 7).fill({ color: theme.grassLight, alpha: 0.9 });
-      if (!theme.stone) for (let x = x0 + 20; x < x0 + W - 12; x += 34 + rand() * 40) terrain.poly([x, y, x + 5, y - 14, x + 10, y]).fill({ color: theme.grassLight }).stroke({ ...OL, width: 2.5 });
-    }
-  }
-  stage.addChild(terrain);
 
   // jump-through platforms
   for (const b of def.oneWay) {
@@ -624,7 +679,7 @@ export function buildLevel(def: LevelDef): Level {
       g.rect(x, y, CP + 1, CP + 1).fill({ color: shade(theme.earth, 0.92) });
     }
     const set = new Set(s.cells.map(([c, r]) => `${c},${r}`));
-    outlineCells(g, set, rows, cols, cellPx);
+    outlineCells(g, set, { c0: 0, c1: cols, r0: 0, r1: rows }, cellPx);
     const bx = px(s.box.x0);
     const by = py(s.box.y1);
     crackLines(g, bx, by, px(s.box.x1 - s.box.x0), px(s.box.y1 - s.box.y0), rand);
@@ -700,7 +755,10 @@ export function buildLevel(def: LevelDef): Level {
 
   const level: Level = {
     def, back, front, sky, solids, hazards: def.hazards, theme, goal, arenaWalls, arenaGfx, chests, secrets,
-    update(camX, camY, dt) {
+    update(camX, camY, dt, halfW, halfH) {
+      for (const k of chunks) {
+        k.node.visible = k.x1 > camX - halfW - 4 && k.x0 < camX + halfW + 4 && k.yTop > camY - halfH - 8 && k.yBot < camY + halfH + 8;
+      }
       const cx = px(camX);
       const cy = py(camY);
       for (const { c, f } of layers) {

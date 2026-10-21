@@ -96,7 +96,8 @@ Duração alvo: 8–12 min por fase.
 5. **Publicação:** GitHub (conta pessoal) + GitHub Pages.
 
 ## 11. Estado atual (demo)
-- Fases implementadas: Cemitério da Vila, Floresta Sombria e Castelo em Ruínas (com arena do chefe).
-- Inimigos: zumbi, corredor, brutamontes, esqueleto arqueiro, cão-zumbi (filhote de dragão provisório), necromante menor.
-- Chefe: Carniçal Rei, 3 fases de luta (golpes de área e onda no chão; invoca zumbis abaixo de 66%; investida abaixo de 33%). Recompensa: pulo duplo.
-- Dificuldade alvo: desafiador mas justo (ainda precisa de teste humano e balanceamento).
+- **Fases** (mapas em grade, em ; verificadas por ): Cemitério da Vila (cripta subterrânea, poço de subida, colina do Necromante), Floresta Sombria (caverna de raízes, árvore gigante com oco secreto, Ogro-lodo) e Castelo em Ruínas (masmorra, salão, muralhas, Carniçal Rei).
+- **Chefes:** Necromante (teleporta, tiros em leque, invoca caveiras, chuva de fogo), Ogro-lodo (salto e pancada com onda de choque) e Carniçal Rei (3 fases). Cada um dá uma recompensa permanente.
+- **Inimigos:** cavaleiros mortos-vivos (zumbi, corredor, bruto, arqueiro, filhote de dragão, necromante) e monstros: caveira voadora, caveira chifruda (cospe fogo), fantasma (some e reaparece), lápide viva, planta carnívora, golems de pedra/tijolo/gelo, gárgula, espinhento (espada não fura), diabrete (investida), sombras saltitantes, tomate-bomba, gosma azul, ciclope e ogro.
+- **Exploração:** plataformas finas (↓ + pular atravessa), espinhos, paredes rachadas que quebram a golpe (segredos), baús comuns e raros (almas, flechas, poções, pedaços de coração), fogueiras, mercador (poções, flechas, equipamentos).
+- **Falta:** Dragão-morto e fase final, mais fases e regiões, arte de cenário melhor, equipamentos que mudam o visual, som real, teste em tablet.

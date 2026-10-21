@@ -555,7 +555,7 @@ export class Game {
     }
     this.world.scale.set(c.zoom);
     this.world.position.set(innerWidth / 2 - (c.x + sx) * U * c.zoom, innerHeight / 2 + (c.y + sy) * U * c.zoom);
-    this.level.update(c.x, c.y, dt);
+    this.level.update(c.x, c.y, dt, (c.view * (innerWidth / innerHeight)) / 2, c.view / 2);
   }
 
   private frame() {
