@@ -40,6 +40,7 @@ export class Game {
   private won = false;
 
   constructor() {
+    if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this; // debug hook for screenshots
     this.save.load();
     this.level = buildLevel(LEVELS[this.save.data.level] ?? LEVELS[0]);
     this.flames = this.level.group.children.filter((c) => c.name === 'flame');

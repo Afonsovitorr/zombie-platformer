@@ -17,6 +17,46 @@ function rng(seed: number) {
 const mat = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1, ...extra });
 
+
+function canvasTexture(size: number, draw: (g: CanvasRenderingContext2D) => void) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  draw(c.getContext('2d')!);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// Dark stone bricks in running bond with a little shade variation.
+function makeStoneTexture() {
+  const rand = rng(3);
+  return canvasTexture(128, (g) => {
+    g.fillStyle = '#2a2638';
+    g.fillRect(0, 0, 128, 128);
+    for (let row = 0; row < 4; row++) {
+      const off = row % 2 ? 32 : 0;
+      for (let col = -1; col < 3; col++) {
+        const l = 52 + rand() * 14;
+        g.fillStyle = `hsl(255 ${12 + rand() * 8}% ${l * 0.62}%)`;
+        g.fillRect(col * 64 + off + 2, row * 32 + 2, 60, 28);
+      }
+    }
+  });
+}
+
+function makeGrassTexture() {
+  const rand = rng(11);
+  return canvasTexture(128, (g) => {
+    g.fillStyle = '#2f5d3a';
+    g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 260; i++) {
+      g.fillStyle = `hsl(${120 + rand() * 25} ${35 + rand() * 20}% ${16 + rand() * 16}%)`;
+      g.fillRect(rand() * 128, rand() * 128, 2 + rand() * 4, 2 + rand() * 6);
+    }
+  });
+}
+
 export function buildLevel(def: LevelDef): Level {
   const group = new THREE.Group();
   const rand = rng(7);
@@ -26,16 +66,29 @@ export function buildLevel(def: LevelDef): Level {
     ...def.floating.map(([x0, x1, top]): Box => ({ x0, x1, y0: top - 0.8, y1: top })),
   ];
 
-  const stone = mat(0x3a3548);
-  const grass = mat(0x2f5d3a);
+  const stoneTex = makeStoneTexture();
+  const grassTex = makeGrassTexture();
+  const textured = (base: THREE.CanvasTexture, repX: number, repY: number) => {
+    const t = base.clone();
+    t.repeat.set(repX, repY);
+    t.needsUpdate = true;
+    return new THREE.MeshStandardMaterial({ map: t, flatShading: true, roughness: 1 });
+  };
   for (const s of solids) {
     const w = s.x1 - s.x0;
     const h = s.y1 - s.y0;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, 5), stone);
-    body.position.set((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2, -0.5);
-    const top = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, 5.1), grass);
-    top.position.set((s.x0 + s.x1) / 2, s.y1 - 0.12, -0.5);
-    group.add(body, top);
+    const cx = (s.x0 + s.x1) / 2;
+    const side = textured(stoneTex, Math.max(1, w / 2), Math.max(1, Math.min(h, 6) / 2));
+    const front = textured(stoneTex, Math.max(1, w / 2), Math.max(1, Math.min(h, 6) / 2));
+    const ends = textured(stoneTex, 2, Math.max(1, Math.min(h, 6) / 2));
+    const lid = textured(grassTex, w / 2, 2.5);
+    // box faces: +x, -x, +y, -y, +z (toward camera), -z
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, 5), [ends, ends, lid, side, front, side]);
+    body.position.set(cx, (s.y0 + s.y1) / 2, -0.5);
+    // mossy lip along the top edge facing the camera
+    const lip = new THREE.Mesh(new THREE.BoxGeometry(w + 0.2, 0.28, 5.2), textured(grassTex, w / 2, 2.5));
+    lip.position.set(cx, s.y1 - 0.12, -0.5);
+    group.add(body, lip);
   }
 
   const first = Math.min(...def.ground.map((g) => g[0]));

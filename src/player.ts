@@ -15,16 +15,15 @@ interface Stage {
   dmg: number; // multiplier over stats.damage
   reach: number;
   kb: number; // knockback multiplier
-  swing: [number, number]; // sword arm angle at start / end of the swing
   lunge: number; // forward push when the swing starts
   shake: number;
 }
 
 // 3-hit combo: two quick slashes, then a heavy finisher.
 const STAGES: Stage[] = [
-  { dur: 0.32, from: 0.08, to: 0.2, dmg: 1, reach: 2.0, kb: 1, swing: [-2.2, 1.5], lunge: 3, shake: 0 },
-  { dur: 0.32, from: 0.08, to: 0.2, dmg: 1, reach: 2.1, kb: 1, swing: [-0.8, 2.4], lunge: 3, shake: 0 },
-  { dur: 0.5, from: 0.18, to: 0.3, dmg: 1.6, reach: 2.3, kb: 1.8, swing: [-2.8, 1.6], lunge: 5, shake: 0.18 },
+  { dur: 0.4, from: 0.16, to: 0.3, dmg: 1, reach: 2.0, kb: 1, lunge: 3, shake: 0 },
+  { dur: 0.4, from: 0.16, to: 0.3, dmg: 1, reach: 2.1, kb: 1, lunge: 3, shake: 0 },
+  { dur: 0.55, from: 0.26, to: 0.4, dmg: 1.6, reach: 2.3, kb: 1.8, lunge: 5, shake: 0.18 },
 ];
 
 const JUMP = 15;
@@ -61,7 +60,7 @@ export class Player {
   private safe = { x: 0, y: 0.5 };
   private safeTimer = 0;
 
-  private actor = new Actor('character-keeper', 1.85);
+  private actor = new Actor('character-keeper', 2.05);
   private model = this.actor.root;
 
   constructor() {
@@ -70,23 +69,26 @@ export class Player {
   }
 
   // Sword and shield are plain boxes parented to the arm nodes, so they follow every animation.
+  // The arm bone points along its local x axis, so the blade continues that axis past the hand.
   private attachGear() {
     const u = 1 / this.actor.scale; // raw model units per world unit
     const armR = this.actor.node('arm-right');
     const armL = this.actor.node('arm-left');
 
     const sword = new THREE.Group();
-    const blade = box(0.09 * u, 0.06 * u, 0.95 * u, 0xdfe6ee, 0x223344);
-    blade.position.z = 0.55 * u;
-    const guard = box(0.09 * u, 0.3 * u, 0.08 * u, 0x8a6d3b);
-    guard.position.z = 0.05 * u;
-    sword.add(blade, guard);
-    sword.position.set(-0.27, 0, 0);
+    const blade = box(1.0 * u, 0.07 * u, 0.12 * u, 0xdfe6ee, 0x223344);
+    blade.position.x = -0.5 * u;
+    const guard = box(0.05 * u, 0.09 * u, 0.4 * u, 0x8a6d3b);
+    guard.position.x = -0.02 * u;
+    const grip = box(0.28 * u, 0.06 * u, 0.06 * u, 0x4a3320);
+    grip.position.x = 0.14 * u;
+    sword.add(blade, guard, grip);
+    sword.position.set(-0.25, 0, 0);
     armR?.add(sword);
 
     const shield = new THREE.Group();
-    shield.add(box(0.06 * u, 0.55 * u, 0.5 * u, 0x6b3f2a), box(0.08 * u, 0.15 * u, 0.15 * u, 0xc9a24b));
-    shield.position.set(0.28, 0, 0.12 * u);
+    shield.add(box(0.08 * u, 0.8 * u, 0.62 * u, 0x6b3f2a), box(0.1 * u, 0.2 * u, 0.2 * u, 0xc9a24b));
+    shield.position.set(0.3, 0, 0);
     armL?.add(shield);
   }
 
@@ -371,7 +373,7 @@ export class Player {
         break;
       case 'attack': {
         const st = STAGES[this.stage];
-        a.play('attack-melee-right', { fit: st.dur, restart: this.t < dt * 1.5 });
+        a.play(this.stage === 1 ? 'attack-melee-left' : 'attack-melee-right', { fit: st.dur, restart: this.t < dt * 1.5 });
         break;
       }
       case 'plunge':

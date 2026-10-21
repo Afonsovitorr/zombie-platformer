@@ -24,7 +24,7 @@ export class Enemy {
   constructor(readonly def: EnemyDef, x: number) {
     this.hp = def.hp;
     this.body = { x, y: 0.05, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
-    this.actor = new Actor(def.model, def.h * 1.05, def.tint);
+    this.actor = new Actor(def.model, def.h * 1.15, def.tint);
     this.model = this.actor.root;
     this.group.add(this.model);
   }
