@@ -296,8 +296,7 @@ export class Game {
       'Monstros: coleção Land Monster, de Bevouliin (CC0)',
       'Cenário do cemitério: Free Graveyard Platformer Tileset, de pzUH (CC0)',
       'Sons e música: sintetizados no próprio jogo',
-    ].join('
-'));
+    ].join('\n'));
   }
 
   private start() {
