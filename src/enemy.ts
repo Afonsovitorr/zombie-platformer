@@ -90,7 +90,7 @@ export class Enemy implements Foe {
     }
 
     moveBody(b, dt, g.level.solids);
-    if (b.y < -20) this.remove = true;
+    if (b.y < g.level.def.killY) this.remove = true;
 
     this.view.position.set(px(b.x), py(b.y));
     this.view.alpha = this.state === 'dead' ? Math.max(0, 1.6 - this.t) : 1;

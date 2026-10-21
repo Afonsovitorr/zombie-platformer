@@ -21,16 +21,36 @@ interface SheetMeta {
   anims: Record<string, AnimMeta>;
 }
 
+interface MonsterMeta {
+  file: string;
+  cw: number;
+  ch: number;
+  frames: number;
+  anims: Record<string, number[]>;
+}
+
 const sheets: Record<string, SheetMeta> = {};
+const monsters: Record<string, MonsterMeta> = {};
+const monsterFrames = new Map<string, Texture[]>();
 const frames = new Map<string, Texture[]>();
 
 export async function loadSprites(onProgress: (k: number) => void) {
   const base = `${import.meta.env.BASE_URL}sprites/`;
   Object.assign(sheets, await (await fetch(`${base}manifest.json`)).json());
+  Object.assign(monsters, await (await fetch(`${base}monsters.json`)).json());
   const jobs: { variant: string; anim: string; meta: AnimMeta }[] = [];
   for (const [variant, s] of Object.entries(sheets)) for (const [anim, meta] of Object.entries(s.anims)) jobs.push({ variant, anim, meta });
   let done = 0;
-  await Promise.all(
+  const total = jobs.length + Object.keys(monsters).length;
+  await Promise.all([
+    ...Object.entries(monsters).map(async ([name, m]) => {
+      const tex = await Assets.load<Texture>(`${base}${m.file}`);
+      const list: Texture[] = [];
+      for (let i = 0; i < m.frames; i++) list.push(new Texture({ source: tex.source, frame: new Rectangle(i * m.cw, 0, m.cw, m.ch) }));
+      monsterFrames.set(name, list);
+      onProgress(++done / total);
+    }),
+    ...
     jobs.map(async ({ variant, anim, meta }) => {
       const s = sheets[variant];
       const tex = await Assets.load<Texture>(`${base}${meta.file}`);
@@ -40,9 +60,9 @@ export async function loadSprites(onProgress: (k: number) => void) {
         list.push(new Texture({ source: tex.source, frame }));
       }
       frames.set(`${variant}/${anim}`, list);
-      onProgress(++done / jobs.length);
+      onProgress(++done / total);
     }),
-  );
+  ]);
 }
 
 interface PlayOpts {
@@ -149,4 +169,65 @@ export function ghostOf(actor: SpriteActor, x: number, y: number, dir: number) {
   s.position.set(x, y);
   s.tint = 0x9fd8ff;
   return s;
+}
+
+// A cartoon monster that has only a couple of drawn frames: it is brought to life by code
+// (bobbing, squash and stretch, tilt), so one picture can hop, float, charge or swell.
+export class MonsterActor {
+  readonly root = new Container();
+  readonly sprite = new Sprite();
+  readonly height: number;
+  squashX = 1;
+  squashY = 1;
+  tilt = 0;
+  lift = 0; // world units above the feet
+  private idle: Texture[];
+  private hit: Texture[];
+  private walk: Texture[];
+  private base: number;
+  private t = Math.random() * 10;
+  private hold = 0;
+  private holdColor = 0xffffff;
+  private dir = 1;
+  showHit = 0; // seconds left of showing the 'got hit' frame
+
+  constructor(readonly name: string, bodyUnits: number) {
+    const m = monsters[name];
+    const all = monsterFrames.get(name)!;
+    const pick = (a?: number[]) => (a ?? []).map((i) => all[i]);
+    this.idle = pick(m.anims.idle);
+    this.hit = pick(m.anims.hit);
+    this.walk = pick(m.anims.walk);
+    this.height = bodyUnits;
+    this.base = (bodyUnits * U) / m.ch;
+    this.sprite.anchor.set(0.5, 1);
+    this.sprite.texture = this.idle[0];
+    this.root.addChild(this.sprite);
+  }
+
+  setFacing(dir: number) {
+    this.dir = dir < 0 ? -1 : 1;
+  }
+
+  flash(color: number, strength = 1) {
+    this.holdColor = color;
+    this.hold = strength;
+    this.sprite.tint = color;
+  }
+
+  update(dt: number, moving = false) {
+    this.t += dt;
+    const frames = moving && this.walk.length ? this.walk : this.idle;
+    const fps = moving && this.walk.length ? 8 : this.idle.length > 2 ? 6 : 2.5;
+    this.showHit = Math.max(0, this.showHit - dt);
+    const list = this.showHit > 0 && this.hit.length ? this.hit : frames;
+    this.sprite.texture = list[Math.floor(this.t * fps) % list.length];
+    this.sprite.scale.set(this.base * this.squashX * this.dir, this.base * this.squashY);
+    this.sprite.rotation = this.tilt;
+    this.sprite.y = -this.lift * U;
+    if (this.hold > 0) {
+      this.hold = Math.max(0, this.hold - dt * 6);
+      this.sprite.tint = this.hold <= 0 ? 0xffffff : lerpColor(0xffffff, this.holdColor, this.hold);
+    }
+  }
 }

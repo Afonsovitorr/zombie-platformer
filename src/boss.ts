@@ -41,9 +41,9 @@ export class Boss implements Foe {
   private actor: SpriteActor;
   private crown = new Graphics();
 
-  constructor(readonly def: EnemyDef, x: number) {
+  constructor(readonly def: EnemyDef, x: number, y = 0.05) {
     this.hp = def.hp;
-    this.body = { x, y: 0.05, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
+    this.body = { x, y: y + 0.05, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
     this.actor = new SpriteActor(def.sprite, def.body);
     this.view.addChild(this.actor.root);
 

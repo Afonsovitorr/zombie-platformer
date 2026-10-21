@@ -1,6 +1,6 @@
-export type Action = 'left' | 'right' | 'jump' | 'attack' | 'ranged' | 'dodge' | 'block' | 'restart' | 'pause' | 'mute';
+export type Action = 'left' | 'right' | 'jump' | 'attack' | 'ranged' | 'dodge' | 'block' | 'down' | 'interact' | 'potion' | 'restart' | 'pause' | 'mute';
 
-const ACTIONS: Action[] = ['left', 'right', 'jump', 'attack', 'ranged', 'dodge', 'block', 'restart', 'pause', 'mute'];
+const ACTIONS: Action[] = ['left', 'right', 'jump', 'attack', 'ranged', 'dodge', 'block', 'down', 'interact', 'potion', 'restart', 'pause', 'mute'];
 
 const KEYS: Record<string, Action> = {
   ArrowLeft: 'left', KeyA: 'left',
@@ -9,7 +9,10 @@ const KEYS: Record<string, Action> = {
   KeyJ: 'attack', KeyZ: 'attack',
   KeyI: 'ranged', KeyX: 'ranged',
   KeyL: 'dodge', KeyC: 'dodge', ShiftLeft: 'dodge',
-  KeyK: 'block', KeyV: 'block', ArrowDown: 'block', KeyS: 'block',
+  KeyK: 'block', KeyV: 'block',
+  ArrowDown: 'down', KeyS: 'down',
+  KeyE: 'interact', KeyF: 'interact',
+  KeyQ: 'potion', KeyH: 'potion',
   KeyR: 'restart',
   Escape: 'pause', KeyP: 'pause',
   KeyM: 'mute',
@@ -52,6 +55,8 @@ export class Input {
       ['ranged', 'ARCO', 'tb act', 't-ranged'],
       ['dodge', 'ESQUIVA', 'tb act', 't-dodge'],
       ['block', 'ESCUDO', 'tb act', 't-block'],
+      ['interact', 'AGIR', 'tb act small', 't-interact'],
+      ['potion', 'POÇÃO', 'tb act small', 't-potion'],
       ['pause', 'II', 'tb pause', 't-pause'],
     ];
     for (const [action, label, cls, id] of defs) {
@@ -96,6 +101,9 @@ export class Input {
       padHeld.attack = b(2);
       padHeld.ranged = b(3);
       padHeld.block = b(5) || b(7) || b(4) || b(6);
+      padHeld.interact = b(13);
+      padHeld.potion = b(11);
+      padHeld.down = (pad.axes[1] ?? 0) > 0.6;
       padHeld.restart = b(8);
       padHeld.pause = b(9);
     }

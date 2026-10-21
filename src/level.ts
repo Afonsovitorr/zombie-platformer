@@ -1,6 +1,6 @@
 import { Container, FillGradient, Graphics } from 'pixi.js';
 import type { Box } from './physics';
-import type { LevelDef } from './data/levels';
+import { CELL, type ChestDef, type LevelDef, type SecretDef } from './data/levels';
 import { U, px, py } from './gfx';
 
 export const OUTLINE = 0x1a1030;
@@ -31,18 +31,37 @@ export interface Layer {
   f: number; // 1 = moves with the world, 0 = fixed to the screen
 }
 
+export interface ChestObj {
+  def: ChestDef;
+  view: Container;
+  lid: Graphics;
+  glow: Graphics;
+  opened: boolean;
+  open(): void;
+}
+
+export interface SecretObj {
+  def: SecretDef;
+  view: Container;
+  broken: boolean;
+}
+
 export interface Level {
   def: LevelDef;
   back: Container; // everything behind the characters
   front: Container;
   sky: Graphics;
-  solids: Box[];
+  solids: Box[]; // mutable: breakable walls are removed from here
+  hazards: Box[];
   theme: Theme;
   goal: Container;
   arenaWalls: Box[]; // become solid while the boss fight is locked
   arenaGfx: Container[];
+  chests: ChestObj[];
+  secrets: SecretObj[];
   update(camX: number, camY: number, dt: number): void;
-  light(upTo: number | null): void; // campfires at or before this x are lit
+  light(upTo: number | null): void; // campfires with an index up to this one are lit
+  breakSecret(id: string): SecretObj | null;
   resizeSky(w: number, h: number): void;
 }
 
@@ -157,14 +176,6 @@ function crate() {
   return g;
 }
 
-function chest() {
-  const g = new Graphics();
-  g.roundRect(-30, -28, 60, 28, 5).fill({ color: 0x9a5a2a }).stroke(OL);
-  g.moveTo(-30, -28).quadraticCurveTo(0, -62, 30, -28).closePath().fill({ color: 0xb8702f }).stroke(OL);
-  g.rect(-5, -34, 10, 14).fill({ color: 0xf2c14e }).stroke({ ...OL, width: 3 });
-  return g;
-}
-
 function column(h: number, color: number) {
   const g = new Graphics();
   g.roundRect(-34, -22, 68, 22, 5).fill({ color }).stroke(OL);
@@ -266,48 +277,79 @@ function castleSilhouette(w: number, h: number, color: number, rand: () => numbe
   return g;
 }
 
-// ---- solid ground ---------------------------------------------------------------------------
+function shade(color: number, k: number) {
+  const r = Math.min(255, Math.round(((color >> 16) & 255) * k));
+  const g = Math.min(255, Math.round(((color >> 8) & 255) * k));
+  const b = Math.min(255, Math.round((color & 255) * k));
+  return (r << 16) | (g << 8) | b;
+}
 
-function drawSolid(s: Box, t: Theme, rand: () => number) {
+// ---- grid terrain ---------------------------------------------------------------------------
+
+const CP = CELL * U; // pixels per grid cell
+
+// Strokes the exposed outline of a set of cells: merges neighbouring edge pieces into long lines.
+function outlineCells(g: Graphics, cells: Set<string>, rows: number, cols: number, cellPx: (c: number, r: number) => [number, number]) {
+  const has = (c: number, r: number) => cells.has(`${c},${r}`);
+  for (let r = 0; r <= rows; r++) {
+    let c = 0;
+    while (c < cols) {
+      // boundary r lies between row r-1 and row r; draw where exactly one side is filled
+      const edge = (cc: number) => has(cc, r - 1) !== has(cc, r);
+      if (!edge(c)) { c++; continue; }
+      const c0 = c;
+      while (c < cols && edge(c)) c++;
+      const [x0, y] = cellPx(c0, r);
+      const [x1] = cellPx(c, r);
+      g.moveTo(x0, y).lineTo(x1, y);
+    }
+  }
+  for (let c = 0; c <= cols; c++) {
+    let r = 0;
+    while (r < rows) {
+      const edge = (rr: number) => has(c - 1, rr) !== has(c, rr);
+      if (!edge(r)) { r++; continue; }
+      const r0 = r;
+      while (r < rows && edge(r)) r++;
+      const [x, y0] = cellPx(c, r0);
+      const [, y1] = cellPx(c, r);
+      g.moveTo(x, y0).lineTo(x, y1);
+    }
+  }
+  g.stroke(OL);
+}
+
+function crackLines(g: Graphics, x: number, y: number, w: number, h: number, rand: () => number) {
+  for (let i = 0; i < 3; i++) {
+    const sx = x + 10 + rand() * (w - 20);
+    const sy = y + 10 + rand() * (h - 20);
+    g.moveTo(sx, sy).lineTo(sx + (rand() - 0.5) * 36, sy + 10 + rand() * 16).lineTo(sx + (rand() - 0.5) * 30, sy + 30 + rand() * 14).stroke({ width: 3, color: OUTLINE, alpha: 0.7, cap: 'round', join: 'round' });
+  }
+}
+
+function spikesGfx(w: number) {
   const g = new Graphics();
-  const x0 = px(s.x0);
-  const W = px(s.x1 - s.x0);
-  const top = py(s.y1);
-  const depth = Math.min(s.y1 - s.y0, 7) * U;
-
-  g.roundRect(x0, top, W, depth, 12).fill({ color: t.earth }).stroke(OL);
-  if (t.stone && depth > 1.5 * U) {
-    // paved bricks
-    for (let row = 0; row * 38 < depth; row++) {
-      const y = top + 26 + row * 38;
-      g.moveTo(x0 + 3, y).lineTo(x0 + W - 3, y).stroke({ width: 2.5, color: t.earthDark });
-      for (let x = x0 + (row % 2 ? 30 : 0); x < x0 + W; x += 60) g.moveTo(x, y).lineTo(x, y + 38).stroke({ width: 2.5, color: t.earthDark });
-    }
-  } else if (depth > 1.5 * U) {
-    for (let i = 0; i < W / 26; i++) {
-      const cx = x0 + 14 + rand() * (W - 28);
-      const cy = top + 50 + rand() * Math.max(10, depth - 70);
-      g.ellipse(cx, cy, 5 + rand() * 9, 4 + rand() * 6).fill({ color: rand() < 0.5 ? t.earthDark : 0xa07a58 });
-    }
-  }
-
-  // cap: grass with a scalloped lower edge, or a paved slab
-  const capH = t.stone ? 30 : 36;
-  const pts: number[] = [x0, top];
-  const n = Math.max(2, Math.round(W / 26));
-  pts.push(x0 + W, top);
-  for (let i = n; i >= 0; i--) {
-    const x = x0 + (W * i) / n;
-    pts.push(x, top + Math.min(capH, depth - 14) + (i % 2 ? Math.min(12, depth * 0.2) : 0) + (t.stone || depth < 1.5 * U ? 0 : rand() * 6));
-  }
-  g.poly(pts).fill({ color: t.grass }).stroke(OL);
-  g.rect(x0 + 6, top + 5, W - 12, 7).fill({ color: t.grassLight, alpha: 0.9 });
-  if (!t.stone) {
-    for (let x = x0 + 20; x < x0 + W - 12; x += 34 + rand() * 40) {
-      g.poly([x, top, x + 5, top - 14, x + 10, top]).fill({ color: t.grassLight }).stroke({ ...OL, width: 2.5 });
-    }
+  const n = Math.max(1, Math.round(w / 32));
+  const sw = w / n;
+  for (let i = 0; i < n; i++) {
+    g.poly([i * sw + 2, 0, i * sw + sw / 2, -50, i * sw + sw - 2, 0]).fill({ color: 0xcfd6e6 }).stroke({ ...OL, width: 3 });
+    g.poly([i * sw + sw / 2 - 2, -42, i * sw + sw / 2 - 8, -8, i * sw + sw / 2 - 2, -8]).fill({ color: 0xffffff, alpha: 0.5 });
   }
   return g;
+}
+
+function chestGfx() {
+  const base = new Graphics();
+  base.roundRect(-30, -30, 60, 30, 5).fill({ color: 0x9a5a2a }).stroke(OL);
+  base.rect(-30, -18, 60, 6).fill({ color: 0x7a4420 });
+  base.rect(-4, -26, 8, 16).fill({ color: 0xf2c14e }).stroke({ ...OL, width: 2.5 });
+  const glow = new Graphics().circle(0, -34, 52).fill({ color: 0xffe066, alpha: 0.26 });
+  glow.visible = false;
+  const lid = new Graphics();
+  lid.moveTo(-30, 0).quadraticCurveTo(0, -36, 30, 0).closePath().fill({ color: 0xb8702f }).stroke(OL);
+  lid.rect(-4, -16, 8, 14).fill({ color: 0xf2c14e }).stroke({ ...OL, width: 2.5 });
+  lid.position.set(0, -30);
+  return { base, lid, glow };
 }
 
 // ---- level ----------------------------------------------------------------------------------
@@ -319,12 +361,18 @@ export function buildLevel(def: LevelDef): Level {
   const front = new Container();
   const layers: Layer[] = [];
 
-  const solids: Box[] = [
-    ...def.ground.map(([x0, x1]): Box => ({ x0, x1, y0: -6, y1: 0 })),
-    ...def.floating.map(([x0, x1, top]): Box => ({ x0, x1, y0: top - 0.8, y1: top })),
-  ];
-  const first = Math.min(...def.ground.map((g) => g[0]));
-  const last = Math.max(...def.ground.map((g) => g[1]));
+  const { cols, rows, grid } = def;
+  // world position helpers: cell (c,r) has its lower edge at y = (rows - r - 1) * CELL - yOffset
+  const cellTopY = (r: number) => (rows - r) * CELL - def.yOffset;
+  const cellPx = (c: number, r: number): [number, number] => [c * CP, -cellTopY(r) * U];
+  const ch = (c: number, r: number) => (r < 0 || r >= rows || c < 0 || c >= cols ? '#' : grid[r][c]);
+  const isEarth = (c: number, r: number) => ch(c, r) === '#';
+  const isBlock = (c: number, r: number) => ch(c, r) === '#' || ch(c, r) === 'S';
+
+  const solids: Box[] = [...def.solids, ...def.oneWay, ...def.secrets.map((s) => ({ ...s.box }))];
+  const first = 0;
+  const last = def.bounds.x1;
+  const horizonY = 0;
 
   // sky: screen-fixed gradient (resized with the window)
   const sky = new Graphics();
@@ -332,7 +380,8 @@ export function buildLevel(def: LevelDef): Level {
   const addLayer = (f: number, build: (c: Container, from: number, to: number) => void) => {
     const c = new Container();
     // layer space covers what the camera can see: world x range scaled by f, plus a screen's worth of margin
-    build(c, px(first - 40) * f - 2200, px(last + 40) * f + 2200);
+    build(c, px(first - 20) * f - 2200, px(last + 20) * f + 2200);
+    c.y = horizonY;
     back.addChild(c);
     layers.push({ c, f });
     return c;
@@ -351,7 +400,7 @@ export function buildLevel(def: LevelDef): Level {
 
   // drifting clouds
   const clouds: Container[] = [];
-  const cloudLayer = addLayer(0.1, (c, from, to) => {
+  addLayer(0.1, (c, from, to) => {
     for (let x = from; x < to; x += 420 + rand() * 360) {
       const cl = new Container();
       const w = 80 + rand() * 70;
@@ -363,7 +412,6 @@ export function buildLevel(def: LevelDef): Level {
       c.addChild(cl);
     }
   });
-  void cloudLayer;
 
   if (def.theme === 'cemetery') {
     addLayer(0.25, (c, from, to) => {
@@ -421,77 +469,205 @@ export function buildLevel(def: LevelDef): Level {
     });
   }
 
-  // ---- gameplay layer: platforms and decor in front of the parallax ----
+  // ---- gameplay layer ----
   const stage = new Container();
   back.addChild(stage);
+  const flames: Container[] = [];
+  const glows: Graphics[] = [];
 
-  const place = (g: Container, x: number, scale = 1, y = 0) => {
+  const place = (g: Container, x: number, y: number, scale = 1) => {
     g.position.set(px(x), py(y));
     g.scale.set(scale);
     stage.addChild(g);
     return g;
   };
 
-  const flames: Container[] = [];
-  const glows: Graphics[] = [];
+  // cave backdrop: empty cells that have rock somewhere above them
+  const cave = new Graphics();
+  const caveColor = def.theme === 'castle' ? 0x2c1a34 : def.theme === 'forest' ? 0x1d3a2e : 0x231a40;
+  for (let c = 0; c < cols; c++) {
+    let covered = false;
+    for (let r = 0; r < rows; r++) {
+      if (isBlock(c, r)) {
+        covered = true;
+        continue;
+      }
+      if (!covered) continue;
+      let c1 = c;
+      // extend only along the first column here; runs are merged by the next loop
+      void c1;
+      const [x, y] = cellPx(c, r);
+      cave.rect(x, y, CP + 1, CP + 1).fill({ color: caveColor });
+      if ((c + r) % 2 === 0) cave.rect(x + 8, y + 10, CP - 16, 6).fill({ color: 0xffffff, alpha: 0.04 });
+    }
+  }
+  stage.addChild(cave);
 
-  // decor first (behind platform edges)
+  // surfaces for decor: cells of earth whose upper neighbour is open
+  interface Run { x0: number; x1: number; y: number }
+  const runs: Run[] = [];
+  for (let r = 0; r < rows; r++) {
+    let c = 0;
+    while (c < cols) {
+      const top = (cc: number) => isEarth(cc, r) && !isBlock(cc, r - 1) && ch(cc, r - 1) !== '=' && r > 0;
+      if (!top(c)) { c++; continue; }
+      const c0 = c;
+      while (c < cols && top(c)) c++;
+      runs.push({ x0: c0 * CELL, x1: c * CELL, y: cellTopY(r) });
+    }
+  }
+  const reserved = [...def.checkpoints, ...def.npcs, ...def.chests, def.goal, ...(def.boss ? [def.boss] : [])];
+  const free = (x: number) => !reserved.some((p) => Math.abs(p.x - x) < 2.2);
+
+  const scatter = (every: number, make: () => Container, jitter = 0.8) => {
+    for (const run of runs) {
+      for (let x = run.x0 + 1; x < run.x1 - 0.5; x += every * (0.7 + rand() * 0.6)) {
+        if (rand() < 0.3 || !free(x)) continue;
+        place(make(), x + (rand() - 0.5) * jitter, run.y);
+      }
+    }
+  };
   if (def.theme === 'cemetery') {
-    for (let x = first; x < last + 5; x += 3.4) {
-      if (rand() < 0.3) continue;
-      const r = rand();
-      if (r < 0.55) place(gravestone(rand), x + rand() * 2, 0.9 + rand() * 0.4);
-      else if (r < 0.75) place(pumpkin(22 + rand() * 12), x + rand() * 2);
-      else place(rock(26 + rand() * 12), x + rand() * 2);
-    }
-    for (let x = first + 2; x < last; x += 14 + rand() * 6) place(fence(4 + Math.floor(rand() * 3)), x);
-    for (let x = first + 8; x < last; x += 22 + rand() * 8) place(deadTree(rand, 220 + rand() * 90), x);
+    scatter(3.6, () => { const r = rand(); return r < 0.6 ? gravestone(rand) : r < 0.8 ? pumpkin(22 + rand() * 12) : rock(26 + rand() * 12); });
+    for (const run of runs) if (run.x1 - run.x0 >= 8 && rand() < 0.8) place(fence(4 + Math.floor(rand() * 3)), run.x0 + 1.5 + rand() * (run.x1 - run.x0 - 6), run.y);
+    for (const run of runs) if (run.x1 - run.x0 >= 10 && rand() < 0.7) place(deadTree(rand, 220 + rand() * 90), run.x0 + 2 + rand() * (run.x1 - run.x0 - 4), run.y);
   } else if (def.theme === 'forest') {
-    for (let x = first; x < last; x += 3) {
-      if (rand() < 0.4) continue;
-      const r = rand();
-      if (r < 0.35) place(bush(24 + rand() * 14, 0x4faa3e), x + rand() * 2);
-      else if (r < 0.6) place(mushroom(24 + rand() * 12), x + rand() * 2);
-      else if (r < 0.8) place(rock(24 + rand() * 12), x + rand() * 2);
-      else place(pumpkin(20 + rand() * 10), x + rand() * 2);
-    }
-    for (let x = first + 6; x < last; x += 16 + rand() * 6) place(roundTree(230 + rand() * 90, 0x3f9a46), x);
+    scatter(3, () => { const r = rand(); return r < 0.35 ? bush(24 + rand() * 14, 0x4faa3e) : r < 0.6 ? mushroom(24 + rand() * 12) : r < 0.8 ? rock(24 + rand() * 12) : pumpkin(20 + rand() * 10); });
+    for (const run of runs) if (run.x1 - run.x0 >= 8 && rand() < 0.8) place(roundTree(230 + rand() * 90, 0x3f9a46), run.x0 + 2 + rand() * (run.x1 - run.x0 - 4), run.y);
   } else {
-    for (let x = first + 6; x < last; x += 14 + rand() * 5) place(column(300 + rand() * 40, 0x8a84ad), x);
-    for (let x = first + 9; x < last; x += 19 + rand() * 5) place(banner(150), x, 1, 4.2);
-    for (let x = first + 3; x < last; x += 9) {
-      if (def.checkpoints.some((c) => Math.abs(c - x) < 4)) continue;
-      place(torch(), x, 1, 2.6);
-      const f = flame(16, 38, 0xffa02e, 0xffe27a);
-      f.position.set(px(x), py(2.6) - 50);
-      stage.addChild(f);
-      flames.push(f);
+    for (const run of runs) {
+      if (run.x1 - run.x0 >= 10) place(column(300 + rand() * 40, 0x8a84ad), run.x0 + 3 + rand() * (run.x1 - run.x0 - 6), run.y);
+      if (run.x1 - run.x0 >= 14 && rand() < 0.6) place(banner(150), run.x0 + 2 + rand() * (run.x1 - run.x0 - 4), run.y + 4.6);
+      for (let x = run.x0 + 3; x < run.x1 - 2; x += 8 + rand() * 4) {
+        if (!free(x) || rand() < 0.4) continue;
+        place(torch(), x, run.y + 2.6);
+        const f = flame(16, 38, 0xffa02e, 0xffe27a);
+        f.position.set(px(x), py(run.y + 2.6) - 50);
+        stage.addChild(f);
+        flames.push(f);
+      }
     }
-    for (let x = first + 5; x < last; x += 5 + rand() * 4) {
-      if (rand() < 0.3) continue;
-      const r = rand();
-      place(r < 0.4 ? barrel() : r < 0.8 ? crate() : rock(30), x);
-    }
-    for (let x = first + 30; x < last; x += 45) place(chest(), x);
+    scatter(5, () => { const r = rand(); return r < 0.4 ? barrel() : r < 0.8 ? crate() : rock(30); });
   }
 
-  for (const s of solids) stage.addChild(drawSolid(s, theme, rand));
+  // terrain: earth fill, speckles, outline, grass / slab caps
+  const earthCells = new Set<string>();
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (grid[r][c] === '#') earthCells.add(`${c},${r}`);
+  const terrain = new Graphics();
+  for (let r = 0; r < rows; r++) {
+    let c = 0;
+    while (c < cols) {
+      if (!isEarth(c, r)) { c++; continue; }
+      const c0 = c;
+      while (c < cols && isEarth(c, r)) c++;
+      const [x, y] = cellPx(c0, r);
+      terrain.rect(x, y, (c - c0) * CP, CP + 1).fill({ color: theme.earth });
+    }
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!isEarth(c, r)) continue;
+      const [x, y] = cellPx(c, r);
+      if (theme.stone) {
+        terrain.moveTo(x, y + CP / 2).lineTo(x + CP, y + CP / 2).moveTo(x + (r % 2 ? CP * 0.3 : CP * 0.7), y).lineTo(x + (r % 2 ? CP * 0.3 : CP * 0.7), y + CP / 2).moveTo(x + (r % 2 ? CP * 0.7 : CP * 0.3), y + CP / 2).lineTo(x + (r % 2 ? CP * 0.7 : CP * 0.3), y + CP).stroke({ width: 2.5, color: theme.earthDark });
+      } else if (rand() < 0.7) {
+        terrain.ellipse(x + 20 + rand() * (CP - 40), y + 24 + rand() * (CP - 48), 5 + rand() * 8, 4 + rand() * 5).fill({ color: rand() < 0.5 ? theme.earthDark : 0xa07a58 });
+      }
+    }
+  }
+  outlineCells(terrain, earthCells, rows, cols, cellPx);
+  // caps
+  for (let r = 1; r < rows; r++) {
+    let c = 0;
+    while (c < cols) {
+      const open = (cc: number) => isEarth(cc, r) && !isBlock(cc, r - 1);
+      if (!open(c)) { c++; continue; }
+      const c0 = c;
+      while (c < cols && open(c)) c++;
+      const [x0, y] = cellPx(c0, r);
+      const W = (c - c0) * CP;
+      const capH = theme.stone ? 30 : 36;
+      const pts: number[] = [x0, y, x0 + W, y];
+      const n = Math.max(2, Math.round(W / 26));
+      for (let i = n; i >= 0; i--) pts.push(x0 + (W * i) / n, y + capH + (i % 2 ? 12 : 0) + (theme.stone ? 0 : rand() * 6));
+      terrain.poly(pts).fill({ color: theme.grass }).stroke(OL);
+      terrain.rect(x0 + 6, y + 5, W - 12, 7).fill({ color: theme.grassLight, alpha: 0.9 });
+      if (!theme.stone) for (let x = x0 + 20; x < x0 + W - 12; x += 34 + rand() * 40) terrain.poly([x, y, x + 5, y - 14, x + 10, y]).fill({ color: theme.grassLight }).stroke({ ...OL, width: 2.5 });
+    }
+  }
+  stage.addChild(terrain);
+
+  // jump-through platforms
+  for (const b of def.oneWay) {
+    const g = new Graphics();
+    const w = px(b.x1 - b.x0);
+    g.roundRect(0, 0, w, 34, 10).fill({ color: theme.stone ? theme.earth : 0x8a5f3c }).stroke(OL);
+    g.roundRect(4, 0, w - 8, 14, 7).fill({ color: theme.grass }).stroke({ ...OL, width: 3.5 });
+    g.rect(10, 4, w - 20, 4).fill({ color: theme.grassLight });
+    g.position.set(px(b.x0), py(b.y1));
+    stage.addChild(g);
+  }
+
+  // spikes
+  for (const h of def.hazards) {
+    const g = spikesGfx(px(h.x1 - h.x0));
+    g.position.set(px(h.x0), py(h.y0));
+    stage.addChild(g);
+  }
+
+  // breakable walls
+  const secrets: SecretObj[] = def.secrets.map((s) => {
+    const view = new Container();
+    const g = new Graphics();
+    for (const [c, r] of s.cells) {
+      const [x, y] = cellPx(c, r);
+      g.rect(x, y, CP + 1, CP + 1).fill({ color: shade(theme.earth, 0.92) });
+    }
+    const set = new Set(s.cells.map(([c, r]) => `${c},${r}`));
+    outlineCells(g, set, rows, cols, cellPx);
+    const bx = px(s.box.x0);
+    const by = py(s.box.y1);
+    crackLines(g, bx, by, px(s.box.x1 - s.box.x0), px(s.box.y1 - s.box.y0), rand);
+    view.addChild(g);
+    stage.addChild(view);
+    return { def: s, view, broken: false };
+  });
 
   // checkpoints (campfires)
-  const fires: { x: number; flame: Container; glow: Graphics; lit: boolean }[] = [];
-  for (const x of def.checkpoints) {
-    place(campfire(), x);
+  const fires: { flame: Container; glow: Graphics }[] = [];
+  for (const cp of def.checkpoints) {
+    place(campfire(), cp.x, cp.y);
     const glow = new Graphics().circle(0, 0, 130).fill({ color: 0xffa040, alpha: 0.22 });
-    glow.position.set(px(x), py(0.9));
+    glow.position.set(px(cp.x), py(cp.y + 0.9));
     glow.visible = false;
     const f = flame(26, 70, 0xff8a1e, 0xffe27a);
-    f.position.set(px(x), py(0.3));
+    f.position.set(px(cp.x), py(cp.y + 0.3));
     f.visible = false;
     stage.addChild(glow, f);
-    fires.push({ x, flame: f, glow, lit: false });
+    fires.push({ flame: f, glow });
     flames.push(f);
     glows.push(glow);
   }
+
+  // chests
+  const chests: ChestObj[] = def.chests.map((cd) => {
+    const { base, lid, glow } = chestGfx();
+    const view = new Container();
+    view.addChild(glow, base, lid);
+    if (cd.rich) view.scale.set(1.25);
+    view.position.set(px(cd.x), py(cd.y));
+    stage.addChild(view);
+    const obj: ChestObj = {
+      def: cd, view, lid, glow, opened: false,
+      open() {
+        obj.opened = true;
+        lid.rotation = -1.1;
+        lid.position.set(-6, -34);
+        glow.visible = true;
+      },
+    };
+    return obj;
+  });
 
   // goal flag
   const goal = new Container();
@@ -500,7 +676,7 @@ export function buildLevel(def: LevelDef): Level {
   flagG.star(48, -266, 5, 14, 6).fill({ color: 0xffffff }).stroke({ ...OL, width: 2.5 });
   const ball = new Graphics().circle(0, -304, 10).fill({ color: 0xffc83d }).stroke({ ...OL, width: 4 });
   goal.addChild(pole, flagG, ball);
-  goal.position.set(px(def.goalX), 0);
+  goal.position.set(px(def.goal.x), py(def.goal.y));
   goal.visible = !def.boss;
   stage.addChild(goal);
 
@@ -509,25 +685,27 @@ export function buildLevel(def: LevelDef): Level {
   const arenaGfx: Container[] = [];
   if (def.boss) {
     const [a0, a1] = def.boss.arena;
+    const yLow = def.boss.y - 6;
+    const yHigh = def.boss.y + 16;
     for (const [x0, x1] of [[a0 - 0.8, a0], [a1, a1 + 0.8]] as const) {
-      arenaWalls.push({ x0, x1, y0: -6, y1: 16 });
+      arenaWalls.push({ x0, x1, y0: yLow, y1: yHigh });
       const w = new Graphics();
-      w.roundRect(px(x0), py(16), px(x1 - x0), 22 * U, 8).fill({ color: theme.earth }).stroke(OL);
-      for (let y = 0; y < 22 * U; y += 52) w.moveTo(px(x0) + 3, py(16) + y).lineTo(px(x1) - 3, py(16) + y).stroke({ width: 3, color: theme.earthDark });
+      w.roundRect(px(x0), py(yHigh), px(x1 - x0), (yHigh - yLow) * U, 8).fill({ color: theme.earth }).stroke(OL);
+      for (let y = 0; y < (yHigh - yLow) * U; y += 52) w.moveTo(px(x0) + 3, py(yHigh) + y).lineTo(px(x1) - 3, py(yHigh) + y).stroke({ width: 3, color: theme.earthDark });
       w.visible = false;
       stage.addChild(w);
       arenaGfx.push(w);
     }
   }
 
-  return {
-    def, back, front, sky, solids, theme, goal, arenaWalls, arenaGfx,
+  const level: Level = {
+    def, back, front, sky, solids, hazards: def.hazards, theme, goal, arenaWalls, arenaGfx, chests, secrets,
     update(camX, camY, dt) {
       const cx = px(camX);
       const cy = py(camY);
       for (const { c, f } of layers) {
         c.x = cx * (1 - f);
-        c.y = cy * (1 - f) * 0.8;
+        c.y = horizonY + cy * (1 - f) * 0.8;
       }
       for (const cl of clouds) cl.x += dt * 8;
       const pulse = 1 + Math.sin(performance.now() / 90) * 0.1;
@@ -535,11 +713,20 @@ export function buildLevel(def: LevelDef): Level {
       for (const g of glows) g.alpha = 0.8 + Math.sin(performance.now() / 160) * 0.2;
     },
     light(upTo) {
-      for (const f of fires) {
-        f.lit = upTo !== null && f.x <= upTo;
-        f.flame.visible = f.lit;
-        f.glow.visible = f.lit;
-      }
+      fires.forEach((f, i) => {
+        const lit = upTo !== null && i <= upTo;
+        f.flame.visible = lit;
+        f.glow.visible = lit;
+      });
+    },
+    breakSecret(id) {
+      const s = secrets.find((x) => x.def.id === id && !x.broken);
+      if (!s) return null;
+      s.broken = true;
+      s.view.visible = false;
+      const i = solids.findIndex((b) => b.id === id);
+      if (i >= 0) solids.splice(i, 1);
+      return s;
     },
     resizeSky(w, h) {
       sky.clear();
@@ -547,4 +734,5 @@ export function buildLevel(def: LevelDef): Level {
       sky.rect(0, 0, w, h).fill(grad);
     },
   };
+  return level;
 }

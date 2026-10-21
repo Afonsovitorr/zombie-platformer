@@ -52,6 +52,7 @@ export class Player {
   private airJumpsLeft = 0;
   private hit = new Set<object>();
   private safe = { x: 0, y: 0.5 };
+  private hazardCd = 0;
   private safeTimer = 0;
 
   private actor = new SpriteActor('hero', 2.25);
@@ -79,9 +80,9 @@ export class Player {
     return this.state !== 'dead';
   }
 
-  reset(x: number, stats: Stats) {
+  reset(x: number, y: number, stats: Stats) {
     this.stats = stats;
-    Object.assign(this.body, { x, y: 0.5, vx: 0, vy: 0 });
+    Object.assign(this.body, { x, y: y + 0.1, vx: 0, vy: 0, dropT: 0 });
     this.hp = stats.maxHp;
     this.stamina = stats.maxStamina;
     this.arrows = stats.maxArrows;
@@ -89,7 +90,8 @@ export class Player {
     this.stage = 0;
     this.invuln = 0;
     this.facing = 1;
-    this.safe = { x, y: 0.5 };
+    this.safe = { x, y: y + 0.1 };
+    this.view.alpha = 1;
   }
 
   // Applies new stats mid-run (e.g. after buying a skill); max increases also heal that amount.
@@ -161,7 +163,18 @@ export class Player {
     } else {
       this.safeTimer = 0;
     }
-    if (b.y < -14 && this.alive) {
+    this.hazardCd = Math.max(0, this.hazardCd - dt);
+    if (this.alive && this.hazardCd <= 0 && this.invuln <= 0) {
+      for (const h of g.level.hazards) {
+        if (b.x + b.w / 2 > h.x0 && b.x - b.w / 2 < h.x1 && b.y < h.y1 && b.y + b.h > h.y0) {
+          this.hazardCd = 0.5;
+          this.takeDamage(1, b.x - this.facing, g);
+          b.vy = 10;
+          break;
+        }
+      }
+    }
+    if (b.y < g.level.def.killY && this.alive) {
       this.hp -= 1;
       Object.assign(b, { x: this.safe.x - this.facing * 0.5, y: this.safe.y, vx: 0, vy: 0 });
       this.invuln = 1.2;
@@ -197,7 +210,13 @@ export class Player {
     b.vx += Math.sign(diff) * Math.min(Math.abs(diff), accel * dt);
     if (inp.moveX !== 0) this.facing = sign(inp.moveX);
 
-    if (this.jumpBuf > 0 && !blocking) {
+    if (this.jumpBuf > 0 && (inp.held.down || blocking) && b.standing?.oneWay) {
+      b.dropT = 0.25;
+      b.y -= 0.06;
+      b.onGround = false;
+      this.jumpBuf = 0;
+      this.coyote = 0;
+    } else if (this.jumpBuf > 0 && !blocking) {
       if (this.coyote > 0) {
         g.audio.play('jump');
         b.vy = JUMP;
@@ -255,12 +274,13 @@ export class Player {
     const b = this.body;
     const x0 = Math.min(b.x + this.facing * 0.3, b.x + this.facing * st.reach);
     const x1 = Math.max(b.x + this.facing * 0.3, b.x + this.facing * st.reach);
+    g.strike(x0, x1, b.y, b.y + 1.9);
     for (const z of g.enemies) {
-      if (z.dead || this.hit.has(z)) continue;
+      if (z.dead || z.intangible || this.hit.has(z)) continue;
       const zb = z.body;
       if (zb.x + zb.w / 2 > x0 && zb.x - zb.w / 2 < x1 && zb.y < b.y + 1.9 && zb.y + zb.h > b.y) {
         this.hit.add(z);
-        z.hurt(this.stats.damage * st.dmg, this.facing, g, st.kb);
+        z.hurt(this.stats.damage * st.dmg, this.facing, g, st.kb, 'melee');
         g.shake = Math.max(g.shake, st.shake);
       }
     }
@@ -269,12 +289,13 @@ export class Player {
   // Downward strike: falls fast and bounces off the first enemy it lands on.
   private plungeTick(g: Game) {
     const b = this.body;
+    g.strike(b.x - 0.6, b.x + 0.6, b.y - 1, b.y + 0.3);
     for (const z of g.enemies) {
-      if (z.dead) continue;
+      if (z.dead || z.intangible) continue;
       const zb = z.body;
       const top = zb.y + zb.h;
       if (Math.abs(zb.x - b.x) < zb.w / 2 + 0.5 && b.y <= top + 0.3 && b.y >= zb.y + zb.h * 0.4) {
-        z.hurt(this.stats.damage * 1.5, this.facing, g, 0.6);
+        z.hurt(this.stats.damage * 1.5, this.facing, g, 0.6, 'plunge');
         b.vy = 14;
         this.airJumpsLeft = this.stats.airJumps;
         g.shake = Math.max(g.shake, 0.15);
@@ -436,10 +457,10 @@ export class Bolt {
       if (this.x > s.x0 && this.x < s.x1 && this.y > s.y0 && this.y < s.y1) this.dead = true;
     }
     for (const z of g.enemies) {
-      if (z.dead) continue;
+      if (z.dead || z.intangible) continue;
       const zb = z.body;
       if (Math.abs(this.x - zb.x) < zb.w / 2 + 0.25 && this.y > zb.y && this.y < zb.y + zb.h) {
-        z.hurt(1, sign(this.vx), g);
+        z.hurt(1, sign(this.vx), g, 1, 'arrow');
         this.dead = true;
         break;
       }
