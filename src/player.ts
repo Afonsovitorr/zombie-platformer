@@ -2,10 +2,10 @@ import * as THREE from 'three';
 import { Body, moveBody, sign } from './physics';
 import type { Input } from './input';
 import type { Game } from './game';
+import { BASE_STATS, Stats } from './data/skills';
 
 type State = 'free' | 'attack' | 'block' | 'dodge' | 'hurt' | 'dead';
 
-const RUN = 7;
 const JUMP = 15;
 const ATTACK_TIME = 0.4;
 const HIT_FROM = 0.1;
@@ -23,10 +23,9 @@ const box = (w: number, h: number, d: number, color: number, emissive = 0) =>
 export class Player {
   body: Body = { x: 0, y: 0.5, vx: 0, vy: 0, w: 0.8, h: 1.7, onGround: false };
   facing = 1;
-  maxHp = 5;
-  hp = 5;
-  maxStamina = 100;
-  stamina = 100;
+  stats: Stats = { ...BASE_STATS };
+  hp = BASE_STATS.maxHp;
+  stamina = BASE_STATS.maxStamina;
   state: State = 'free';
   group = new THREE.Group();
 
@@ -80,10 +79,19 @@ export class Player {
     this.group.add(this.model);
   }
 
-  reset(x: number) {
+  get maxHp() {
+    return this.stats.maxHp;
+  }
+
+  get maxStamina() {
+    return this.stats.maxStamina;
+  }
+
+  reset(x: number, stats: Stats) {
+    this.stats = stats;
     Object.assign(this.body, { x, y: 0.5, vx: 0, vy: 0 });
-    this.hp = this.maxHp;
-    this.stamina = this.maxStamina;
+    this.hp = stats.maxHp;
+    this.stamina = stats.maxStamina;
     this.state = 'free';
     this.invuln = 0;
     this.facing = 1;
@@ -159,7 +167,7 @@ export class Player {
     this.state = wantBlock ? 'block' : 'free';
 
     const blocking = this.state === 'block';
-    const target = inp.moveX * (blocking ? 1.5 : RUN);
+    const target = inp.moveX * (blocking ? 1.5 : this.stats.runSpeed);
     const accel = b.onGround ? 60 : 35;
     const diff = target - b.vx;
     b.vx += Math.sign(diff) * Math.min(Math.abs(diff), accel * dt);
@@ -194,12 +202,12 @@ export class Player {
     const b = this.body;
     const x0 = Math.min(b.x + this.facing * 0.3, b.x + this.facing * 2.1);
     const x1 = Math.max(b.x + this.facing * 0.3, b.x + this.facing * 2.1);
-    for (const z of g.zombies) {
+    for (const z of g.enemies) {
       if (z.dead || this.hit.has(z)) continue;
       const zb = z.body;
       if (zb.x + zb.w / 2 > x0 && zb.x - zb.w / 2 < x1 && zb.y < b.y + 1.9 && zb.y + zb.h > b.y) {
         this.hit.add(z);
-        z.hurt(1, this.facing, g);
+        z.hurt(this.stats.damage, this.facing, g);
       }
     }
   }
@@ -245,7 +253,7 @@ export class Player {
     // blink while invulnerable (except dodge, which gets a ghost look)
     this.model.visible = this.invuln <= 0 || this.state === 'dodge' || Math.floor(this.t * 20 + this.invuln * 20) % 2 === 0;
 
-    const speed = Math.abs(b.vx) / RUN;
+    const speed = Math.abs(b.vx) / this.stats.runSpeed;
     const swing = b.onGround ? Math.sin(performance.now() / 70) * speed * 0.9 : 0.5;
     this.legL.rotation.z = swing;
     this.legR.rotation.z = -swing;
@@ -290,7 +298,7 @@ export class Bolt {
     for (const s of g.level.solids) {
       if (this.x > s.x0 && this.x < s.x1 && this.y > s.y0 && this.y < s.y1) this.dead = true;
     }
-    for (const z of g.zombies) {
+    for (const z of g.enemies) {
       if (z.dead) continue;
       const zb = z.body;
       if (Math.abs(this.x - zb.x) < zb.w / 2 + 0.25 && this.y > zb.y && this.y < zb.y + zb.h) {

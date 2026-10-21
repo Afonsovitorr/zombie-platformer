@@ -1,29 +1,45 @@
 import * as THREE from 'three';
 import { Input } from './input';
 import { Hud } from './hud';
+import { Menu } from './menu';
+import { Save } from './save';
 import { Player, Bolt } from './player';
-import { Zombie } from './enemy';
+import { Enemy } from './enemy';
 import { buildLevel, Level } from './level';
+import { LEVELS } from './data/levels';
+import { ENEMIES } from './data/enemies';
+import { statsFor } from './data/skills';
 
 const STEP = 1 / 60;
+const SAFE_SPAWN_GAP = 5; // enemies this close to the respawn point are skipped
+
+type Mode = 'menu' | 'play' | 'pause';
 
 export class Game {
-  level: Level = buildLevel();
+  save = new Save();
+  level: Level;
   player = new Player();
-  zombies: Zombie[] = [];
+  enemies: Enemy[] = [];
   bolts: Bolt[] = [];
   hitStop = 0;
 
+  private mode: Mode = 'menu';
   private renderer = new THREE.WebGLRenderer({ antialias: true });
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(40, 1, 0.1, 300);
   private input = new Input(document.getElementById('touch')!);
   private hud = new Hud();
+  private menu = new Menu();
+  private flames: THREE.Object3D[] = [];
   private acc = 0;
   private last = performance.now();
   private won = false;
 
   constructor() {
+    this.save.load();
+    this.level = buildLevel(LEVELS[this.save.data.level] ?? LEVELS[0]);
+    this.flames = this.level.group.children.filter((c) => c.name === 'flame');
+
     document.body.prepend(this.renderer.domElement);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 
@@ -39,6 +55,7 @@ export class Game {
     addEventListener('resize', () => this.resize());
     this.resize();
     this.reset();
+    this.showMainMenu();
     requestAnimationFrame(() => this.frame());
   }
 
@@ -48,20 +65,66 @@ export class Game {
     this.scene.add(bolt.mesh);
   }
 
+  addSouls(n: number) {
+    this.save.data.souls += n;
+    this.save.persist();
+  }
+
+  private showMainMenu() {
+    this.mode = 'menu';
+    this.hud.message(null);
+    const d = this.save.data;
+    const hasProgress = d.checkpointX !== null || d.souls > 0 || d.skills.length > 0;
+    const buttons = [];
+    if (hasProgress) buttons.push({ label: 'Continuar', run: () => this.start() });
+    buttons.push({
+      label: hasProgress ? 'Novo jogo' : 'Jogar',
+      run: () => {
+        this.save.clear();
+        this.start();
+      },
+    });
+    this.menu.show('Zombie Platformer', buttons, 'Protótipo · Cemitério da Vila');
+  }
+
+  private start() {
+    this.menu.hide();
+    this.mode = 'play';
+    this.reset();
+  }
+
+  private togglePause() {
+    if (this.mode === 'play') {
+      this.mode = 'pause';
+      this.menu.show('Pausado', [
+        { label: 'Continuar', run: () => this.togglePause() },
+        { label: 'Menu principal', run: () => this.showMainMenu() },
+      ]);
+    } else if (this.mode === 'pause') {
+      this.mode = 'play';
+      this.menu.hide();
+    }
+  }
+
   private reset() {
-    for (const z of this.zombies) this.scene.remove(z.group);
+    for (const e of this.enemies) this.scene.remove(e.group);
     for (const b of this.bolts) this.scene.remove(b.mesh);
     this.bolts = [];
-    this.zombies = this.level.spawns.map((x) => {
-      const z = new Zombie(x);
-      this.scene.add(z.group);
-      return z;
-    });
+
+    const startX = this.save.data.checkpointX ?? 0;
+    this.enemies = this.level.def.spawns
+      .filter((s) => Math.abs(s.x - startX) > SAFE_SPAWN_GAP)
+      .map((s) => {
+        const e = new Enemy(ENEMIES[s.type], s.x);
+        this.scene.add(e.group);
+        return e;
+      });
+
     this.player.group.rotation.set(0, 0, 0);
-    this.player.reset(0);
+    this.player.reset(startX, statsFor(this.save.data.skills));
     this.won = false;
     this.hud.message(null);
-    this.camera.position.set(0, 4, 14);
+    this.camera.position.set(startX, 4, 14);
   }
 
   private resize() {
@@ -72,9 +135,27 @@ export class Game {
     this.camera.updateProjectionMatrix();
   }
 
+  private checkpoints() {
+    const p = this.player.body;
+    for (const x of this.level.def.checkpoints) {
+      if (Math.abs(p.x - x) > 1.5 || !p.onGround || this.save.data.checkpointX === x) continue;
+      this.save.data.checkpointX = x;
+      this.save.persist();
+      this.player.hp = this.player.maxHp;
+      this.player.stamina = this.player.maxStamina;
+      this.hud.toast('Fogueira acesa · vida restaurada');
+    }
+  }
+
   private step(dt: number) {
     this.input.update();
+    if (this.mode === 'menu') return;
+
+    if (this.input.pressed.pause) this.togglePause();
+    if (this.mode === 'pause') return;
+
     if (this.input.pressed.restart || ((!this.player.alive || this.won) && this.input.pressed.attack)) {
+      if (this.won) this.save.data.checkpointX = null;
       this.reset();
       return;
     }
@@ -84,23 +165,40 @@ export class Game {
     }
 
     this.player.update(dt, this.input, this);
-    for (const z of this.zombies) z.update(dt, this);
+    for (const e of this.enemies) e.update(dt, this);
     for (const b of this.bolts) b.update(dt, this);
 
-    this.zombies = this.zombies.filter((z) => {
-      if (z.remove) this.scene.remove(z.group);
-      return !z.remove;
+    this.enemies = this.enemies.filter((e) => {
+      if (e.remove) this.scene.remove(e.group);
+      return !e.remove;
     });
     this.bolts = this.bolts.filter((b) => {
       if (b.dead) this.scene.remove(b.mesh);
       return !b.dead;
     });
 
-    if (!this.won && this.player.alive && this.player.body.x > this.level.goalX) {
+    this.checkpoints();
+
+    if (!this.won && this.player.alive && this.player.body.x > this.level.def.goalX) {
       this.won = true;
-      this.hud.message('Fim da demo da Fase 1', 'Atacar ou R para jogar de novo');
+      this.mode = 'menu';
+      this.menu.show(
+        'Fim da demo da Fase 1',
+        [
+          {
+            label: 'Jogar de novo',
+            run: () => {
+              this.save.data.checkpointX = null;
+              this.save.persist();
+              this.start();
+            },
+          },
+          { label: 'Menu principal', run: () => this.showMainMenu() },
+        ],
+        `${this.level.def.name} concluído`,
+      );
     }
-    if (!this.player.alive) this.hud.message('Você caiu...', 'Atacar ou R para tentar de novo');
+    if (!this.player.alive) this.hud.message('Você caiu...', 'Atacar ou R para voltar à última fogueira');
   }
 
   private frame() {
@@ -125,7 +223,10 @@ export class Game {
     cam.position.z = 14;
     cam.lookAt(cam.position.x, cam.position.y - 1.4, 0);
 
-    this.hud.set(this.player.hp, this.player.maxHp, this.player.stamina, this.player.maxStamina);
+    const pulse = 1 + Math.sin(now / 90) * 0.12;
+    for (const f of this.flames) f.scale.set(pulse, 1 + (pulse - 1) * 2, pulse);
+
+    this.hud.set(this.player.hp, this.player.maxHp, this.player.stamina, this.player.maxStamina, this.save.data.souls);
     this.renderer.render(this.scene, cam);
   }
 }

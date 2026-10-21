@@ -1,6 +1,6 @@
-export type Action = 'left' | 'right' | 'jump' | 'attack' | 'ranged' | 'dodge' | 'block' | 'restart';
+export type Action = 'left' | 'right' | 'jump' | 'attack' | 'ranged' | 'dodge' | 'block' | 'restart' | 'pause';
 
-const ACTIONS: Action[] = ['left', 'right', 'jump', 'attack', 'ranged', 'dodge', 'block', 'restart'];
+const ACTIONS: Action[] = ['left', 'right', 'jump', 'attack', 'ranged', 'dodge', 'block', 'restart', 'pause'];
 
 const KEYS: Record<string, Action> = {
   ArrowLeft: 'left', KeyA: 'left',
@@ -11,6 +11,7 @@ const KEYS: Record<string, Action> = {
   KeyL: 'dodge', KeyC: 'dodge', ShiftLeft: 'dodge',
   KeyK: 'block', KeyV: 'block', ArrowDown: 'block', KeyS: 'block',
   KeyR: 'restart',
+  Escape: 'pause', KeyP: 'pause',
 };
 
 const record = (v: boolean) => Object.fromEntries(ACTIONS.map((a) => [a, v])) as Record<Action, boolean>;
@@ -50,6 +51,7 @@ export class Input {
       ['ranged', 'ARCO', 'tb act', 't-ranged'],
       ['dodge', 'ESQUIVA', 'tb act', 't-dodge'],
       ['block', 'ESCUDO', 'tb act', 't-block'],
+      ['pause', 'II', 'tb pause', 't-pause'],
     ];
     for (const [action, label, cls, id] of defs) {
       const el = document.createElement('div');
@@ -93,7 +95,8 @@ export class Input {
       padHeld.attack = b(2);
       padHeld.ranged = b(3);
       padHeld.block = b(5) || b(7) || b(4) || b(6);
-      padHeld.restart = b(9);
+      padHeld.restart = b(8);
+      padHeld.pause = b(9);
     }
 
     for (const a of ACTIONS) {

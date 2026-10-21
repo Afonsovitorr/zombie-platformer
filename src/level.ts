@@ -1,25 +1,12 @@
 import * as THREE from 'three';
 import type { Box } from './physics';
+import type { LevelDef } from './data/levels';
 
 export interface Level {
+  def: LevelDef;
   group: THREE.Group;
   solids: Box[];
-  spawns: number[];
-  goalX: number;
 }
-
-const ground = (x0: number, x1: number): Box => ({ x0, x1, y0: -6, y1: 0 });
-const floating = (x0: number, x1: number, top: number): Box => ({ x0, x1, y0: top - 0.8, y1: top });
-
-const SOLIDS: Box[] = [
-  ground(-12, 28), ground(32, 58), ground(62, 88), ground(92, 125),
-  floating(10, 15, 3), floating(17, 22, 5.8),
-  floating(40, 45, 3), floating(47, 52, 4.6),
-  floating(70, 75, 3), floating(77, 82, 5.8),
-  floating(100, 106, 3),
-];
-
-const SPAWNS = [14, 24, 38, 50, 66, 74, 84, 98, 108, 114];
 
 // Small deterministic RNG so decor is stable between runs.
 function rng(seed: number) {
@@ -29,13 +16,18 @@ function rng(seed: number) {
 const mat = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) =>
   new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1, ...extra });
 
-export function buildLevel(): Level {
+export function buildLevel(def: LevelDef): Level {
   const group = new THREE.Group();
   const rand = rng(7);
 
+  const solids: Box[] = [
+    ...def.ground.map(([x0, x1]): Box => ({ x0, x1, y0: -6, y1: 0 })),
+    ...def.floating.map(([x0, x1, top]): Box => ({ x0, x1, y0: top - 0.8, y1: top })),
+  ];
+
   const stone = mat(0x3a3548);
   const grass = mat(0x2f5d3a);
-  for (const s of SOLIDS) {
+  for (const s of solids) {
     const w = s.x1 - s.x0;
     const h = s.y1 - s.y0;
     const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, 5), stone);
@@ -45,10 +37,13 @@ export function buildLevel(): Level {
     group.add(body, top);
   }
 
-  // Background decor at several depths: tombstones, dead trees, fence posts.
+  const first = Math.min(...def.ground.map((g) => g[0]));
+  const last = Math.max(...def.ground.map((g) => g[1]));
+
+  // Background decor at several depths: tombstones and dead trees.
   const tomb = mat(0x6b6880);
   const wood = mat(0x2a2024);
-  for (let x = -10; x < 130; x += 2.2) {
+  for (let x = first; x < last + 5; x += 2.2) {
     const z = -2.5 - rand() * 9;
     const kind = rand();
     if (kind < 0.45) {
@@ -69,28 +64,40 @@ export function buildLevel(): Level {
 
   // Foreground silhouettes give depth against the camera.
   const dark = mat(0x0d0b14);
-  for (let x = 0; x < 125; x += 17 + rand() * 8) {
+  for (let x = first; x < last; x += 17 + rand() * 8) {
     const h = 6 + rand() * 4;
     const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.9, h, 0.9), dark);
     pillar.position.set(x, h / 2 - 1, 6);
     group.add(pillar);
   }
 
-  // Moon, far back; it also acts as the scene's dominant mood light.
   const moon = new THREE.Mesh(
     new THREE.SphereGeometry(5, 16, 12),
     new THREE.MeshBasicMaterial({ color: 0xe9e4c8, fog: false }),
   );
-  moon.position.set(30, 26, -90);
+  moon.position.set((first + last) / 2, 26, -90);
   group.add(moon);
 
-  // Goal banner
-  const goalX = 120;
+  // Campfires (checkpoints)
+  const log = mat(0x4a2f1c);
+  const flame = mat(0xff9a2e, { emissive: 0xff6a00, emissiveIntensity: 1.2 });
+  for (const x of def.checkpoints) {
+    const a = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.18, 0.18), log);
+    a.position.set(x, 0.12, 0);
+    a.rotation.z = 0.25;
+    const b = a.clone();
+    b.rotation.z = -0.25;
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.9, 5), flame);
+    f.position.set(x, 0.6, 0);
+    f.name = 'flame';
+    group.add(a, b, f);
+  }
+
   const pole = new THREE.Mesh(new THREE.BoxGeometry(0.2, 5, 0.2), mat(0xcccccc));
-  pole.position.set(goalX, 2.5, 0);
+  pole.position.set(def.goalX, 2.5, 0);
   const flag = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1, 0.1), mat(0xffc857, { emissive: 0xffa500, emissiveIntensity: 0.6 }));
-  flag.position.set(goalX + 0.9, 4.4, 0);
+  flag.position.set(def.goalX + 0.9, 4.4, 0);
   group.add(pole, flag);
 
-  return { group, solids: SOLIDS, spawns: SPAWNS, goalX };
+  return { def, group, solids };
 }
