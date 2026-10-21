@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Zombie Platformer</title>
+    <style>
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0a14; font-family: system-ui, sans-serif; color: #eee; touch-action: none; user-select: none; -webkit-user-select: none; }
+      canvas { display: block; width: 100vw; height: 100vh; }
+      #hud { position: fixed; inset: 0; pointer-events: none; }
+      #bars { position: absolute; top: 14px; left: 16px; display: flex; flex-direction: column; gap: 6px; }
+      #hearts { font-size: 26px; letter-spacing: 2px; color: #e5484d; text-shadow: 0 2px 0 #0008; }
+      #stamina { width: 180px; height: 10px; background: #0007; border: 1px solid #fff3; border-radius: 6px; overflow: hidden; }
+      #stamina i { display: block; height: 100%; width: 100%; background: #4ade80; transition: background .15s; }
+      #msg { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 10px; text-align: center; font-size: 34px; font-weight: 700; text-shadow: 0 3px 0 #000a; background: #0006; }
+      #msg small { font-size: 16px; font-weight: 400; opacity: .8; }
+      #help { position: absolute; top: 14px; right: 16px; font-size: 12px; opacity: .55; text-align: right; line-height: 1.5; }
+      #touch { position: absolute; inset: 0; display: none; }
+      body.touch #touch { display: block; }
+      body.touch #help { display: none; }
+      .tb { position: absolute; pointer-events: auto; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #ffffff1c; border: 2px solid #ffffff44; color: #fff; font-size: 13px; font-weight: 700; touch-action: none; }
+      .tb.on { background: #ffffff55; }
+      .pad { width: 84px; height: 84px; bottom: 28px; font-size: 30px; }
+      #t-left { left: 24px; } #t-right { left: 124px; }
+      .act { width: 74px; height: 74px; }
+      #t-jump { right: 28px; bottom: 28px; width: 88px; height: 88px; }
+      #t-attack { right: 128px; bottom: 44px; }
+      #t-ranged { right: 120px; bottom: 132px; }
+      #t-dodge { right: 214px; bottom: 28px; }
+      #t-block { right: 214px; bottom: 112px; }
+    </style>
+  </head>
+  <body>
+    <div id="hud">
+      <div id="bars"><div id="hearts"></div><div id="stamina"><i></i></div></div>
+      <div id="help">A/D ou ← → mover · Espaço pular<br />J atacar · I arco · K bloquear · L esquiva · R reiniciar<br />Gamepad: A pular · X atacar · Y arco · B esquiva · RB bloquear</div>
+      <div id="msg"></div>
+      <div id="touch"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
