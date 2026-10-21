@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import { Application, Container } from 'pixi.js';
 import { Input } from './input';
 import { Hud } from './hud';
 import { Menu } from './menu';
@@ -13,6 +13,8 @@ import { LEVELS } from './data/levels';
 import { ENEMIES } from './data/enemies';
 import type { EnemyDef } from './data/enemies';
 import { GameAudio } from './audio';
+import { Fx } from './fx';
+import { U } from './gfx';
 import { BRANCH_NAMES, SKILLS, statsFor } from './data/skills';
 
 const STEP = 1 / 60;
@@ -31,34 +33,29 @@ export class Game {
   hitStop = 0;
   shake = 0; // camera shake intensity, decays every frame
   audio = new GameAudio();
+  fx = new Fx();
 
   private mode: Mode = 'menu';
-  private renderer = new THREE.WebGLRenderer({ antialias: true });
-  private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(40, 1, 0.1, 900);
-  private sun = new THREE.DirectionalLight(0xffffff, 2.4);
-  private hemi = new THREE.HemisphereLight(0xffffff, 0x000000, 1.0);
+  private world = new Container();
+  private foes = new Container();
+  private shots = new Container();
+  private cam = { x: 0, y: 3, zoom: 1, view: 11 };
   private input = new Input(document.getElementById('touch')!);
   private hud = new Hud();
   private menu = new Menu();
-  private flames: THREE.Object3D[] = [];
   private boss: Boss | null = null;
   private bossLocked = false;
   private acc = 0;
   private last = performance.now();
   private won = false;
 
-  constructor() {
+  constructor(private app: Application) {
     if (import.meta.env.DEV) (window as unknown as { __game: Game }).__game = this; // debug hook for screenshots
     this.save.load();
 
-    document.body.prepend(this.renderer.domElement);
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-
-    this.scene.add(this.hemi);
-    const moonLight = this.sun;
-    moonLight.position.set(-6, 12, 10);
-    this.scene.add(moonLight, this.player.group);
+    document.body.prepend(app.canvas);
+    app.stage.addChild(this.world);
+    this.world.addChild(this.foes, this.player.view, this.shots, this.fx.layer);
 
     this.loadLevel(Math.min(this.save.data.level, LEVELS.length - 1));
 
@@ -73,38 +70,37 @@ export class Game {
   // ---- world ------------------------------------------------------------------------------
 
   private loadLevel(index: number) {
-    if (this.level) this.scene.remove(this.level.group);
+    if (this.level) {
+      this.world.removeChild(this.level.back);
+      this.app.stage.removeChild(this.level.sky);
+      this.level.back.destroy({ children: true });
+      this.level.sky.destroy();
+    }
     this.save.data.level = index;
     this.level = buildLevel(LEVELS[index]);
-    this.scene.add(this.level.group);
-    this.flames = this.level.group.children.filter((c) => c.name === 'flame');
-
-    const th = this.level.theme;
-    const sky = new THREE.Color(th.sky);
-    this.scene.background = sky;
-    this.scene.fog = new THREE.Fog(sky, th.fog[0], th.fog[1]);
-    this.sun.color.setHex(th.sun);
-    this.hemi.color.setHex(th.hemi[0]);
-    this.hemi.groundColor.setHex(th.hemi[1]);
+    this.app.stage.addChildAt(this.level.sky, 0);
+    this.world.addChildAt(this.level.back, 0);
+    this.level.resizeSky(innerWidth, innerHeight);
+    this.level.light(this.save.data.checkpointX);
   }
 
   spawnBolt(x: number, y: number, dir: number) {
     const bolt = new Bolt(x, y, dir);
     this.bolts.push(bolt);
-    this.scene.add(bolt.mesh);
+    this.shots.addChild(bolt.view);
   }
 
   spawnEnemyBolt(kind: BoltKind, x: number, y: number, vx: number, vy: number, dmg: number) {
     const bolt = new EnemyBolt(kind, x, y, vx, vy, dmg);
     this.enemyBolts.push(bolt);
-    this.scene.add(bolt.mesh);
+    this.shots.addChild(bolt.view);
   }
 
   // Summoned enemies rise from the ground and give no souls.
   spawnEnemy(type: string, x: number, y: number, owner?: Foe) {
     const e = new Enemy(ENEMIES[type], x, y, !!owner, owner);
     this.enemies.push(e);
-    this.scene.add(e.group);
+    this.foes.addChild(e.view);
     return e;
   }
 
@@ -131,6 +127,7 @@ export class Game {
     this.addSouls(def.souls);
     this.unlockArena();
     this.level.goal.visible = true;
+    this.fx.ring(this.player.body.x, this.player.body.y + 1.2, 0xffd447, 60);
     this.hud.setBoss(null, 0);
     if (!this.save.data.skills.includes(BOSS_REWARD_SKILL)) {
       this.save.data.skills.push(BOSS_REWARD_SKILL);
@@ -145,7 +142,7 @@ export class Game {
   private lockArena() {
     this.bossLocked = true;
     this.level.solids.push(...this.level.arenaWalls);
-    for (const m of this.level.arenaMeshes) m.visible = true;
+    for (const m of this.level.arenaGfx) m.visible = true;
     this.boss?.activate();
     this.toast('O Carniçal Rei desperta!');
   }
@@ -156,7 +153,7 @@ export class Game {
       const i = this.level.solids.indexOf(w);
       if (i >= 0) this.level.solids.splice(i, 1);
     }
-    for (const m of this.level.arenaMeshes) m.visible = false;
+    for (const m of this.level.arenaGfx) m.visible = false;
   }
 
   // ---- menus ------------------------------------------------------------------------------
@@ -268,9 +265,10 @@ export class Game {
   // ---- loop -------------------------------------------------------------------------------
 
   private reset() {
-    for (const e of this.enemies) this.scene.remove(e.group);
-    for (const b of this.bolts) this.scene.remove(b.mesh);
-    for (const b of this.enemyBolts) this.scene.remove(b.mesh);
+    for (const e of this.enemies) e.view.destroy({ children: true });
+    for (const b of this.bolts) b.view.destroy();
+    for (const b of this.enemyBolts) b.view.destroy();
+    this.fx.clear();
     this.bolts = [];
     this.enemyBolts = [];
     this.unlockArena();
@@ -288,22 +286,20 @@ export class Game {
       foes.push(this.boss);
     }
     this.enemies = foes;
-    for (const e of foes) this.scene.add(e.group);
+    for (const e of foes) this.foes.addChild(e.view);
     this.hud.setBoss(null, 0);
 
-    this.player.group.rotation.set(0, 0, 0);
     this.player.reset(startX, statsFor(this.save.data.skills));
     this.won = false;
     this.hud.message(null);
-    this.camera.position.set(startX, 4, 12);
+    this.cam.x = startX;
+    this.cam.y = 3;
+    this.level.light(this.save.data.checkpointX);
   }
 
   private resize() {
-    this.renderer.setSize(innerWidth, innerHeight, false);
-    this.camera.aspect = innerWidth / innerHeight;
-    // keep roughly the same horizontal view on portrait / narrow screens
-    this.camera.fov = this.camera.aspect < 1.4 ? 52 : 40;
-    this.camera.updateProjectionMatrix();
+    this.app.renderer.resize(innerWidth, innerHeight);
+    this.level.resizeSky(innerWidth, innerHeight);
   }
 
   private checkpoints() {
@@ -316,6 +312,8 @@ export class Game {
       this.player.stamina = this.player.maxStamina;
       this.player.arrows = this.player.stats.maxArrows;
       this.audio.play('fire');
+      this.level.light(x);
+      this.fx.ring(x, 1, 0xffa040, 50);
       this.hud.toast('Fogueira acesa · vida restaurada');
     }
   }
@@ -343,15 +341,15 @@ export class Game {
     for (const b of this.enemyBolts) b.update(dt, this);
 
     this.enemies = this.enemies.filter((e) => {
-      if (e.remove) this.scene.remove(e.group);
+      if (e.remove) e.view.destroy({ children: true });
       return !e.remove;
     });
     this.bolts = this.bolts.filter((b) => {
-      if (b.dead) this.scene.remove(b.mesh);
+      if (b.dead) b.view.destroy();
       return !b.dead;
     });
     this.enemyBolts = this.enemyBolts.filter((b) => {
-      if (b.dead) this.scene.remove(b.mesh);
+      if (b.dead) b.view.destroy();
       return !b.dead;
     });
 
@@ -367,6 +365,28 @@ export class Game {
     if (!this.player.alive) this.hud.message('Você caiu...', 'Atacar ou R para voltar à última fogueira');
   }
 
+  private updateCamera(dt: number) {
+    const p = this.player.body;
+    const c = this.cam;
+    const k = 1 - Math.exp(-5 * dt);
+    c.x += (p.x + this.player.facing * 2.5 - c.x) * k;
+    c.y += (2.4 + Math.max(0, p.y) * 0.55 - c.y) * k;
+    // frame the arena a little wider during the boss fight; show more on narrow screens
+    const wantView = Math.max(this.bossLocked ? 13.5 : 11, 15 / (innerWidth / innerHeight));
+    c.view += (wantView - c.view) * (1 - Math.exp(-3 * dt));
+    c.zoom = innerHeight / (c.view * U);
+    let sx = 0;
+    let sy = 0;
+    if (this.shake > 0.001) {
+      sx = (Math.random() - 0.5) * this.shake;
+      sy = (Math.random() - 0.5) * this.shake;
+      this.shake *= Math.exp(-9 * dt);
+    }
+    this.world.scale.set(c.zoom);
+    this.world.position.set(innerWidth / 2 - (c.x + sx) * U * c.zoom, innerHeight / 2 + (c.y + sy) * U * c.zoom);
+    this.level.update(c.x, c.y, dt);
+  }
+
   private frame() {
     requestAnimationFrame(() => this.frame());
     const now = performance.now();
@@ -379,26 +399,9 @@ export class Game {
       this.acc -= STEP;
     }
 
-    const p = this.player.body;
-    const cam = this.camera;
-    const tx = p.x + this.player.facing * 2.5;
-    const ty = 3.6 + Math.max(0, p.y) * 0.55;
-    const k = 1 - Math.exp(-5 * frameDt);
-    cam.position.x += (tx - cam.position.x) * k;
-    cam.position.y += (ty - cam.position.y) * k;
-    cam.position.z = this.bossLocked ? 15 : 12; // pull back to frame the boss arena
-    cam.lookAt(cam.position.x, cam.position.y - 1.4, 0);
-    if (this.shake > 0.001) {
-      cam.position.x += (Math.random() - 0.5) * this.shake;
-      cam.position.y += (Math.random() - 0.5) * this.shake;
-      this.shake *= Math.exp(-9 * frameDt);
-    }
-
-    for (const c of this.level.group.children) if (c.name === 'cloud') c.position.x += frameDt * 0.6;
-    const pulse = 1 + Math.sin(now / 90) * 0.12;
-    for (const f of this.flames) f.scale.set(pulse, 1 + (pulse - 1) * 2, pulse);
-
+    this.fx.update(frameDt);
+    this.updateCamera(frameDt);
     this.hud.set(this.player.hp, this.player.maxHp, this.player.stamina, this.player.maxStamina, this.save.data.souls, this.player.arrows);
-    this.renderer.render(this.scene, cam);
+    this.app.render();
   }
 }

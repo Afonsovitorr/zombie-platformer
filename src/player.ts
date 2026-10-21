@@ -1,10 +1,10 @@
-import * as THREE from 'three';
+import { Container, Graphics } from 'pixi.js';
 import { Body, moveBody, sign } from './physics';
 import type { Input } from './input';
 import type { Game } from './game';
 import type { Foe } from './foe';
 import { BASE_STATS, Stats } from './data/skills';
-import { Actor } from './actor';
+import { SpriteActor, px, py } from './gfx';
 
 type State = 'free' | 'attack' | 'block' | 'dodge' | 'hurt' | 'plunge' | 'dead';
 
@@ -26,17 +26,10 @@ const STAGES: Stage[] = [
   { dur: 0.55, from: 0.26, to: 0.4, dmg: 1.6, reach: 2.3, kb: 1.8, lunge: 5, shake: 0.18 },
 ];
 
-const SWINGS = ['1H_Melee_Attack_Chop', '1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Slice_Horizontal'];
 const JUMP = 15;
 const DODGE_TIME = 0.28;
 const DODGE_COST = 25;
 const BLOCK_COST = 20;
-
-const box = (w: number, h: number, d: number, color: number, emissive = 0) =>
-  new THREE.Mesh(
-    new THREE.BoxGeometry(w, h, d),
-    new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.9, emissive, emissiveIntensity: emissive ? 0.8 : 0 }),
-  );
 
 export class Player {
   body: Body = { x: 0, y: 0.5, vx: 0, vy: 0, w: 0.8, h: 1.7, onGround: false };
@@ -46,7 +39,7 @@ export class Player {
   stamina = BASE_STATS.maxStamina;
   arrows = BASE_STATS.maxArrows;
   state: State = 'free';
-  group = new THREE.Group();
+  view = new Container();
 
   private t = 0;
   private invuln = 0;
@@ -61,11 +54,17 @@ export class Player {
   private safe = { x: 0, y: 0.5 };
   private safeTimer = 0;
 
-  private actor = new Actor('kk/kk_Knight', 2.1, { gear: ['1H_Sword', 'Round_Shield'] });
-  private model = this.actor.root;
+  private actor = new SpriteActor('hero', 2.25);
+  private shield = new Graphics();
+  private wasAir = false;
+  private ghostT = 0;
+  private slashed = false;
 
   constructor() {
-    this.group.add(this.model);
+    this.shield.arc(0, 0, 70, -1.2, 1.2).stroke({ width: 8, color: 0x7fe0ff, alpha: 0.9, cap: 'round' });
+    this.shield.arc(0, 0, 58, -1.0, 1.0).stroke({ width: 4, color: 0xffffff, alpha: 0.6, cap: 'round' });
+    this.shield.visible = false;
+    this.view.addChild(this.actor.root, this.shield);
   }
 
   get maxHp() {
@@ -170,7 +169,7 @@ export class Player {
       if (this.hp <= 0) this.die();
     }
 
-    this.animate(dt);
+    this.animate(dt, g);
   }
 
   private setState(s: State) {
@@ -299,11 +298,14 @@ export class Player {
         g.hitStop = 0.14;
         g.shake = Math.max(g.shake, 0.3);
         g.toast('Parry!');
+        g.fx.ring(b.x + this.facing * 0.9, b.y + 1.1, 0x7fe0ff, 34);
+        g.fx.text(b.x, b.y + 2.6, 'Parry!', 0x7fe0ff);
         g.audio.play('parry');
         return;
       }
       this.stamina -= BLOCK_COST;
       g.audio.play('block');
+      g.fx.hit(b.x + this.facing * 0.9, b.y + 1.1, 0x7fe0ff, 5);
       b.vx = away * 4;
       g.hitStop = 0.04;
       if (this.stamina <= 0) {
@@ -315,6 +317,8 @@ export class Player {
     }
 
     this.hp -= amount;
+    this.actor.flash(0xff9a9a);
+    g.fx.hit(b.x, b.y + 1.1, 0xff6a6a, 6);
     g.audio.play(this.hp <= 0 ? 'death' : 'hurt');
     g.hitStop = 0.08;
     g.shake = Math.max(g.shake, 0.25);
@@ -331,50 +335,82 @@ export class Player {
     this.setState('dead');
   }
 
-  private animate(dt: number) {
+  // Maps the swing clock onto the clip: wind-up frames, then the baked-in slash, then recovery.
+  private swingProgress(st: Stage, strike: number) {
+    const t = this.t;
+    if (t < st.from) return (strike * t) / st.from;
+    if (t < st.to) return strike + (0.2 * (t - st.from)) / (st.to - st.from);
+    return strike + 0.2 + (0.08 * (t - st.to)) / Math.max(0.01, st.dur - st.to);
+  }
+
+  private animate(dt: number, g: Game) {
     const b = this.body;
-    const targetRot = this.facing > 0 ? 0 : Math.PI;
-    this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.35;
-    this.group.position.set(b.x, b.y, 0);
-
-    // blink while invulnerable (except dodge, which gets a ghost look)
-    this.model.visible = this.invuln <= 0 || this.state === 'dodge' || Math.floor(this.t * 20 + this.invuln * 20) % 2 === 0;
-
     const a = this.actor;
+    this.view.position.set(px(b.x), py(b.y));
+    a.setFacing(this.facing);
+    this.view.rotation = 0;
+
+    // blink while invulnerable (dodge gets a ghost trail instead)
+    this.view.visible = this.invuln <= 0 || this.state === 'dodge' || Math.floor(this.t * 20 + this.invuln * 20) % 2 === 0;
+    this.shield.visible = this.state === 'block';
+    this.shield.position.set(this.facing * 0.85 * 64, -1.1 * 64);
+    this.shield.scale.x = this.facing;
+    a.root.alpha = this.state === 'dodge' ? 0.6 : 1;
+    a.root.rotation = 0;
+
+    if (b.onGround && this.wasAir) g.fx.dust(b.x, b.y, 0);
+    this.wasAir = !b.onGround;
+
     const moving = Math.abs(b.vx);
     switch (this.state) {
       case 'dead':
-        a.play('Death_A', { once: true });
-        break;
+        a.play('die', { once: true, fit: 0.9 });
+        a.update(dt);
+        return;
       case 'attack': {
         const st = STAGES[this.stage];
-        a.play(SWINGS[this.stage], { fit: st.dur, restart: this.t < dt * 1.5, fade: 0.06 });
+        const clip = this.stage === 1 ? 'attack2' : 'attack';
+        a.scrub(clip, this.swingProgress(st, this.stage === 1 ? 0.62 : 0.7));
+        if (!this.slashed && this.t >= st.from) {
+          this.slashed = true;
+          if (this.stage === 2) g.fx.ring(b.x + this.facing * 1.4, b.y + 1.1, 0xffffff, 22);
+        }
+        if (this.t < st.from) this.slashed = false;
         break;
       }
       case 'plunge':
-        a.play('Jump_Idle');
+        a.scrub('jump', 0.3);
+        a.root.rotation = this.facing * 0.5;
         break;
       case 'dodge':
-        a.play('Dodge_Forward', { fit: DODGE_TIME, fade: 0.05 });
-        break;
+        a.play('run', { speed: 2 });
+        a.update(dt);
+        this.ghostT -= dt;
+        if (this.ghostT <= 0) {
+          this.ghostT = 0.05;
+          g.fx.ghost(a, b.x, b.y, this.facing);
+        }
+        return;
       case 'hurt':
-        a.play('Hit_A', { fit: 0.35 });
+        a.scrub('idle', 0);
+        a.root.rotation = -this.facing * 0.18;
         break;
       case 'block':
-        a.play('Blocking');
+        a.scrub('idle', 0.2);
         break;
       default:
-        if (!b.onGround) a.play('Jump_Idle');
-        else if (moving > 5) a.play('Running_A', { speed: Math.max(0.8, moving / this.stats.runSpeed) });
-        else if (moving > 0.5) a.play('Walking_A', { speed: Math.max(0.8, moving / 2) });
-        else a.play('Idle');
+        if (!b.onGround) a.scrub('jump', b.vy > 1 ? 0.3 : 0.45);
+        else if (moving > 5) a.play('run', { speed: Math.max(0.8, moving / this.stats.runSpeed) });
+        else if (moving > 0.5) a.play('walk', { speed: Math.max(0.8, moving / 2.4) });
+        else a.play('idle');
     }
     a.update(dt);
   }
+
 }
 
 export class Bolt {
-  mesh = box(0.5, 0.12, 0.12, 0xfff2a8, 0xffd447);
+  view = new Graphics();
   x: number;
   y: number;
   vx: number;
@@ -385,13 +421,16 @@ export class Bolt {
     this.x = x;
     this.y = y;
     this.vx = dir * 16;
-    this.mesh.position.set(x, y, 0);
+    this.view.poly([-22, -3, 14, -3, 14, -8, 26, 0, 14, 8, 14, 3, -22, 3]).fill({ color: 0xfff2a8 }).stroke({ width: 3, color: 0x1a1030, join: 'round' });
+    this.view.rect(-26, -6, 8, 12).fill({ color: 0xe0443a });
+    this.view.scale.x = dir;
+    this.view.position.set(px(x), py(y));
   }
 
   update(dt: number, g: Game) {
     this.x += this.vx * dt;
     this.life -= dt;
-    this.mesh.position.x = this.x;
+    this.view.position.x = px(this.x);
     if (this.life <= 0) this.dead = true;
     for (const s of g.level.solids) {
       if (this.x > s.x0 && this.x < s.x1 && this.y > s.y0 && this.y < s.y1) this.dead = true;

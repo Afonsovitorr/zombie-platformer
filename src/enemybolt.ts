@@ -1,25 +1,28 @@
-import * as THREE from 'three';
+import { Graphics } from 'pixi.js';
 import type { Game } from './game';
 import { sign } from './physics';
+import { px, py } from './gfx';
 
 export type BoltKind = 'arrow' | 'wave';
 
-const arrowMat = new THREE.MeshStandardMaterial({ color: 0xd8d2c0, emissive: 0x554433, flatShading: true });
-const waveMat = new THREE.MeshStandardMaterial({ color: 0xb06cff, emissive: 0x7a2cff, emissiveIntensity: 0.9, flatShading: true });
-
 // Hostile projectile. Arrows fly straight; waves travel along the ground and must be jumped over.
 export class EnemyBolt {
-  mesh: THREE.Mesh;
+  view = new Graphics();
   dead = false;
   private life: number;
 
   constructor(readonly kind: BoltKind, public x: number, public y: number, private vx: number, private vy: number, private dmg: number) {
-    this.mesh =
-      kind === 'arrow'
-        ? new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.07, 0.07), arrowMat)
-        : new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.1, 5), waveMat);
-    if (kind === 'wave') this.mesh.rotation.z = -Math.PI / 2 * sign(vx);
-    this.mesh.position.set(x, y, 0);
+    if (kind === 'arrow') {
+      this.view.poly([-26, -3, 16, -3, 16, -9, 30, 0, 16, 9, 16, 3, -26, 3]).fill({ color: 0xe9e3cf }).stroke({ width: 3, color: 0x1a1030, join: 'round' });
+      this.view.poly([-26, -3, -34, -9, -20, -3]).fill({ color: 0xc43a4a });
+      this.view.poly([-26, 3, -34, 9, -20, 3]).fill({ color: 0xc43a4a });
+    } else {
+      // a rolling purple crescent
+      this.view.moveTo(0, 0).quadraticCurveTo(46, -30, 8, -84).quadraticCurveTo(-4, -40, -34, 0).closePath().fill({ color: 0xb06cff }).stroke({ width: 4, color: 0x1a1030, join: 'round' });
+      this.view.moveTo(2, -6).quadraticCurveTo(24, -26, 6, -58).quadraticCurveTo(0, -30, -16, -6).closePath().fill({ color: 0xe6c8ff });
+      this.view.scale.x = sign(vx);
+    }
+    this.view.position.set(px(x), py(y));
     this.life = kind === 'arrow' ? 2.5 : 3.5;
   }
 
@@ -27,8 +30,8 @@ export class EnemyBolt {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     this.life -= dt;
-    this.mesh.position.set(this.x, this.y, 0);
-    if (this.kind === 'arrow') this.mesh.rotation.z = Math.atan2(this.vy, this.vx);
+    this.view.position.set(px(this.x), py(this.y));
+    if (this.kind === 'arrow') this.view.rotation = -Math.atan2(this.vy, this.vx);
     if (this.life <= 0) this.dead = true;
 
     if (this.kind === 'arrow') {

@@ -1,9 +1,9 @@
-import * as THREE from 'three';
+import { Container } from 'pixi.js';
 import { Body, Box, moveBody, sign } from './physics';
 import type { Game } from './game';
 import type { EnemyDef } from './data/enemies';
 import type { Foe } from './foe';
-import { Actor } from './actor';
+import { SpriteActor, px, py } from './gfx';
 
 type State = 'idle' | 'chase' | 'windup' | 'attack' | 'recover' | 'hurt' | 'stun' | 'dead';
 
@@ -21,7 +21,7 @@ export class Enemy implements Foe {
   body: Body;
   hp: number;
   facing = -1;
-  group = new THREE.Group();
+  view = new Container();
   remove = false;
 
   private state: State = 'idle';
@@ -29,15 +29,13 @@ export class Enemy implements Foe {
   private struck = false;
   private castCd = 3;
   private rise = 0;
-  private actor: Actor;
-  private model: THREE.Group;
+  private actor: SpriteActor;
 
   constructor(readonly def: EnemyDef, x: number, y = 0.05, public summoned = false, readonly owner?: Foe) {
     this.hp = def.hp;
     this.body = { x, y, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
-    this.actor = new Actor(def.model, def.h * 1.15, { tint: def.tint, hue: def.hue, sat: def.sat, light: def.light, gear: def.gear, props: def.props, hide: def.hide });
-    this.model = this.actor.root;
-    this.group.add(this.model);
+    this.actor = new SpriteActor(def.sprite, def.body);
+    this.view.addChild(this.actor.root);
     if (summoned) this.rise = RISE_TIME;
   }
 
@@ -60,7 +58,8 @@ export class Enemy implements Foe {
     this.body.vx = dir * 6 * heavy * kb;
     this.body.vy = 4 * heavy;
     this.go(this.hp <= 0 ? 'dead' : 'hurt');
-    this.actor.setEmissive(0xffffff);
+    this.actor.flash(0xff9a9a);
+    g.fx.hit(this.body.x, this.body.y + this.body.h * 0.6);
     g.audio.play(this.hp <= 0 ? 'death' : kb > 1.5 ? 'heavy' : 'hit');
     if (this.hp <= 0) g.onKill(this.def, this.summoned);
   }
@@ -68,18 +67,18 @@ export class Enemy implements Foe {
   update(dt: number, g: Game) {
     const b = this.body;
     this.t += dt;
-    this.actor.fadeEmissive(0.3);
 
     if (this.rise > 0) {
       this.rise -= dt;
       b.vx = 0;
-      this.actor.play(this.actor.has('Spawn_Ground') ? 'Spawn_Ground' : 'Idle', { fit: RISE_TIME, once: true });
+      this.actor.scrub('die', Math.max(0, this.rise / RISE_TIME));
+      if (this.rise < dt * 1.5) g.fx.dust(b.x, b.y, 0);
       moveBody(b, dt, g.level.solids);
-      this.group.position.set(b.x, b.y, 0);
+      this.view.position.set(px(b.x), py(b.y));
+      this.actor.setFacing(this.facing);
       this.actor.update(dt);
       return;
     }
-    this.model.position.y = 0;
 
     if (!this.common()) {
       switch (this.def.kind) {
@@ -93,9 +92,9 @@ export class Enemy implements Foe {
     moveBody(b, dt, g.level.solids);
     if (b.y < -20) this.remove = true;
 
-    this.group.position.set(b.x, b.y, 0);
-    const targetRot = this.facing > 0 ? 0 : Math.PI;
-    this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.3;
+    this.view.position.set(px(b.x), py(b.y));
+    this.view.alpha = this.state === 'dead' ? Math.max(0, 1.6 - this.t) : 1;
+    this.actor.setFacing(this.facing);
     this.animate(dt);
   }
 
@@ -117,7 +116,7 @@ export class Enemy implements Foe {
         return true;
       case 'stun':
         b.vx = 0;
-        this.actor.setEmissive(0x2244aa);
+        this.actor.flash(0x8fa8ff, 1);
         if (this.t > STUN_TIME) this.go(this.def.kind === 'archer' ? 'idle' : 'chase');
         return true;
       case 'dead':
@@ -150,7 +149,7 @@ export class Enemy implements Foe {
         break;
       case 'windup':
         b.vx = 0;
-        this.actor.setEmissive(0x661111);
+        this.actor.flash(0xff9a9a, 0.7);
         if (this.t > d.windup) this.go('attack');
         break;
       case 'attack':
@@ -184,7 +183,7 @@ export class Enemy implements Foe {
         break;
       case 'windup':
         this.facing = sign(dx);
-        this.actor.setEmissive(0x661111);
+        this.actor.flash(0xff9a9a, 0.7);
         if (this.t > d.windup) {
           const p = g.player.body;
           const sx = b.x + this.facing * 0.7;
@@ -231,7 +230,7 @@ export class Enemy implements Foe {
       case 'windup':
         b.vx = 0;
         this.facing = sign(dx);
-        this.actor.setEmissive(0x661111);
+        this.actor.flash(0xff9a9a, 0.7);
         if (this.t > d.windup) {
           this.go('attack');
           b.vx = this.facing * 10;
@@ -279,10 +278,11 @@ export class Enemy implements Foe {
       case 'windup':
         b.vx = 0;
         this.facing = sign(dx);
-        this.actor.setEmissive(0x5522aa);
+        this.actor.flash(0xd29aff, 0.7);
         if (this.t > d.windup) {
           const side = hasGround(g.level.solids, b.x - this.facing * 2.5, b.y) ? -this.facing : this.facing;
           g.spawnEnemy('walker', b.x + side * 2.5, b.y + 0.05, this);
+          g.fx.ring(b.x + side * 2.5, b.y + 0.4, 0xb84dff, 26);
           this.castCd = SUMMON_COOLDOWN;
           this.go('attack');
         }
@@ -302,33 +302,31 @@ export class Enemy implements Foe {
     const a = this.actor;
     const d = this.def;
     const k = d.kind;
-    const swing = (d.windup + d.active) * 1.15; // one attack clip spans the telegraph and the blow
-    const punch = d.id === 'brute' ? 'Unarmed_Melee_Attack_Punch_B' : 'Unarmed_Melee_Attack_Punch_A';
     switch (this.state) {
       case 'idle':
       case 'recover':
-        a.play('Idle');
+        a.play('idle');
         break;
       case 'chase':
-        if (k === 'necro') a.play(Math.abs(this.body.vx) > 0.1 ? 'Walking_A' : 'Idle');
-        else if (d.speed > 4) a.play('Running_B', { speed: d.speed / 5 });
-        else a.play('Walking_B', { speed: Math.max(0.7, d.speed / 2.2) });
+        if (k === 'necro') a.play(Math.abs(this.body.vx) > 0.1 ? 'walk' : 'idle');
+        else if (d.speed > 4) a.play('run', { speed: d.speed / 5 });
+        else a.play('walk', { speed: Math.max(0.7, d.speed / 2.2) });
         break;
       case 'windup':
+        // wind-up frames, ending on the frame just before the baked-in slash
+        a.scrub('attack', (0.7 * this.t) / Math.max(0.01, d.windup));
+        break;
       case 'attack':
-        if (k === 'archer') a.play('1H_Ranged_Shoot', { fit: swing, fade: 0.15 });
-        else if (k === 'necro') a.play(this.state === 'windup' ? 'Spellcast_Raise' : 'Spellcast_Summon', { fit: swing, fade: 0.15 });
-        else if (k === 'hound') a.play(this.state === 'windup' ? 'Jump_Start' : 'Jump_Idle', { fade: 0.1 });
-        else a.play(punch, { fit: swing, fade: 0.12 });
+        a.scrub('attack', Math.min(0.98, 0.7 + (0.28 * this.t) / Math.max(0.01, d.active)));
         break;
       case 'hurt':
-        a.play('Hit_A', { fit: 0.4 });
+        a.scrub('idle', 0);
         break;
       case 'stun':
-        a.play('Sit_Floor_Idle');
+        a.scrub('idle', 0.25);
         break;
       case 'dead':
-        a.play('Death_A', { once: true });
+        a.play('die', { once: true, fit: 0.9 });
         break;
     }
     a.update(dt);

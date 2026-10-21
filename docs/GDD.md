@@ -4,7 +4,7 @@ Título provisório: **a definir** (ideias: "Cavaleiro das Cinzas", "Marcha dos 
 Rascunho para revisão. Tudo marcado com **[?]** é decisão em aberto.
 
 ## 1. Visão
-Plataforma 2,5D de fantasia medieval em low-poly. Um guerreiro atravessa um reino tomado por mortos-vivos.
+Plataforma 2D de fantasia medieval em cartoon vetorial colorido (estilo Plants vs Zombies). Um guerreiro atravessa um reino tomado por mortos-vivos.
 Jogabilidade num plano 2D com cenário 3D (referência: Trine, Hollow Knight, Ori).
 Sensação: desafiador e exploratório. Combate com peso, risco e recompensa; fases com atalhos e segredos.
 
@@ -78,9 +78,9 @@ Pontos de descanso a cada ~2 minutos: curam, salvam progresso e reaparecem os in
 Duração alvo: 8–12 min por fase.
 
 ## 8. Direção de arte e áudio
-- Low-poly com paleta sombria e um acento quente (tochas, fogueiras, olhos dos zumbis).
-- Modelos animados CC0 (Quaternius, Kenney) e ajustes de cor para unificar o visual.
-- Câmera lateral com leve profundidade e parallax; foco no herói.
+- Cartoon vetorial colorido (contorno grosso, cores chapadas, rostos expressivos), com acentos quentes (tochas, fogueiras).
+- Sprites CC0 (akylrum) recoloridos em mortos-vivos; cenário desenhado em código.
+- Câmera lateral 2D com camadas de parallax; foco no herói.
 - Áudio: música ambiente por região (loops CC0/OpenGameArt), efeitos de golpe, bloqueio, passos e zumbis.
 - Feedback de combate (hit-stop, tremor de câmera, partículas) é parte do design, não enfeite.
 
@@ -93,10 +93,10 @@ Duração alvo: 8–12 min por fase.
 2. **Jogabilidade:** combo, parry, tipos de inimigo, ataque aéreo, pulo duplo, sistema de almas e habilidades.
 3. **Arte e áudio:** modelos e animações reais, cenário, música, efeitos.
 4. **Conteúdo:** 3 fases, chefe, balanceamento, polimento.
-5. **Publicação:** GitHub (conta pessoal) + Vercel.
+5. **Publicação:** GitHub (conta pessoal) + GitHub Pages.
 
 ## 11. Estado atual (demo)
 - Fases implementadas: Cemitério da Vila, Floresta Sombria e Castelo em Ruínas (com arena do chefe).
-- Inimigos: zumbi, corredor, brutamontes, esqueleto arqueiro, cão-zumbi (modelo provisório), necromante menor.
+- Inimigos: zumbi, corredor, brutamontes, esqueleto arqueiro, cão-zumbi (filhote de dragão provisório), necromante menor.
 - Chefe: Carniçal Rei, 3 fases de luta (golpes de área e onda no chão; invoca zumbis abaixo de 66%; investida abaixo de 33%). Recompensa: pulo duplo.
 - Dificuldade alvo: desafiador mas justo (ainda precisa de teste humano e balanceamento).

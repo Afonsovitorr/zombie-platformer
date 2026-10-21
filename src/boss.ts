@@ -1,10 +1,9 @@
-import * as THREE from 'three';
+import { Container, Graphics } from 'pixi.js';
 import { Body, moveBody, sign } from './physics';
 import type { Game } from './game';
 import type { EnemyDef } from './data/enemies';
 import type { Foe } from './foe';
-import { Actor } from './actor';
-import { toonMaterial } from './toon';
+import { SpriteActor, px, py } from './gfx';
 import { Enemy } from './enemy';
 
 type State = 'dormant' | 'idle' | 'windup' | 'attack' | 'recover' | 'stun' | 'dead';
@@ -27,7 +26,7 @@ export class Boss implements Foe {
   body: Body;
   hp: number;
   facing = -1;
-  group = new THREE.Group();
+  view = new Container();
   remove = false;
   summoned = false;
 
@@ -39,30 +38,22 @@ export class Boss implements Foe {
   private chargeCd = 5;
   private stunImmune = 0;
   private forceNext: Atk | null = null;
-  private actor: Actor;
-  private model: THREE.Group;
-  private crown: THREE.Object3D;
-  private headPos = new THREE.Vector3();
+  private actor: SpriteActor;
+  private crown = new Graphics();
 
   constructor(readonly def: EnemyDef, x: number) {
     this.hp = def.hp;
     this.body = { x, y: 0.05, vx: 0, vy: 0, w: def.w, h: def.h, onGround: false };
-    this.actor = new Actor(def.model, def.h * 1.15, { tint: def.tint, hue: def.hue, sat: def.sat, light: def.light, gear: def.gear, props: def.props, hide: def.hide });
-    this.model = this.actor.root;
-    this.group.add(this.model);
+    this.actor = new SpriteActor(def.sprite, def.body);
+    this.view.addChild(this.actor.root);
 
-    const crownMat = toonMaterial(null, 0xffc83d, { emissive: 0x6b4a00 });
-    const crown = new THREE.Group(); // follows the head bone; see update()
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.07, 0.34), crownMat);
-    crown.add(band);
-    for (const [px, pz] of [[-0.12, -0.12], [0.12, -0.12], [-0.12, 0.12], [0.12, 0.12], [0, 0]] as const) {
-      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.14, 4), crownMat);
-      spike.position.set(px, 0.1, pz);
-      crown.add(spike);
-    }
-    crown.scale.setScalar(this.actor.scale * 1.9);
-    this.crown = crown;
-    this.group.add(crown);
+    // gold crown sitting on the head
+    const c = this.crown;
+    c.poly([-26, 0, -30, -34, -13, -17, 0, -42, 13, -17, 30, -34, 26, 0]).fill({ color: 0xffc83d }).stroke({ width: 4, color: 0x1a1030, join: 'round' });
+    c.circle(0, -12, 5).fill({ color: 0xe0443a }).stroke({ width: 2.5, color: 0x1a1030 });
+    c.scale.set(def.body / 3.2);
+    this.view.addChild(c);
+    this.crown.position.set(-0.18 * px(def.body), -px(def.body) * 0.96);
   }
 
   get dead() {
@@ -100,7 +91,8 @@ export class Boss implements Foe {
     const before = this.phase;
     this.hp -= this.state === 'stun' ? dmg * 1.5 : dmg;
     g.hitStop = Math.max(g.hitStop, 0.04);
-    this.actor.setEmissive(0xffffff);
+    this.actor.flash(0xff6a6a);
+    g.fx.hit(this.body.x, this.body.y + this.body.h * 0.6, 0xffe066, 9);
     g.audio.play(this.hp <= 0 ? 'death' : 'heavy');
     if (this.hp <= 0) {
       this.hp = 0;
@@ -123,7 +115,6 @@ export class Boss implements Foe {
     this.stunImmune = Math.max(0, this.stunImmune - dt);
     this.summonCd -= dt;
     this.chargeCd -= dt;
-    this.actor.fadeEmissive(0.3);
 
     const dx = p.body.x - b.x;
     const dy = p.body.y - b.y;
@@ -151,7 +142,7 @@ export class Boss implements Foe {
         const [wind] = TIMES[this.atk];
         b.vx = 0;
         if (this.t < wind * speedMul * 0.6) this.facing = sign(dx); // stops tracking right before the blow
-        this.actor.setEmissive(0x771111);
+        this.actor.flash(0xff9a9a, 0.7);
         if (this.t > wind * speedMul) this.enterAttack(g);
         break;
       }
@@ -184,7 +175,7 @@ export class Boss implements Foe {
       }
       case 'stun':
         b.vx = 0;
-        this.actor.setEmissive(0x2244aa);
+        this.actor.flash(0x8fa8ff, 1);
         if (this.t > STUN_TIME) this.go('idle');
         break;
       case 'dead':
@@ -194,9 +185,9 @@ export class Boss implements Foe {
     }
 
     moveBody(b, dt, g.level.solids);
-    this.group.position.set(b.x, b.y, 0);
-    const targetRot = this.facing > 0 ? 0 : Math.PI;
-    this.model.rotation.y += (targetRot - this.model.rotation.y) * 0.25;
+    this.view.position.set(px(b.x), py(b.y));
+    this.view.alpha = this.state === 'dead' ? Math.max(0, 1 - Math.max(0, this.t - 1.5) / 1.4) : 1;
+    this.actor.setFacing(this.facing);
     this.animate(dt);
   }
 
@@ -251,34 +242,35 @@ export class Boss implements Foe {
   private animate(dt: number) {
     const a = this.actor;
     const [wind, act] = TIMES[this.atk];
+    const speedMul = this.phase === 3 ? 0.7 : 1;
     switch (this.state) {
       case 'dormant':
       case 'recover':
-        a.play('2H_Melee_Idle');
+        a.play('idle');
         break;
       case 'idle':
-        a.play(Math.abs(this.body.vx) > 0.2 ? 'Walking_B' : '2H_Melee_Idle', { speed: this.phase === 3 ? 1.5 : 1 });
+        if (Math.abs(this.body.vx) > 0.2) a.play('walk', { speed: this.phase === 3 ? 1.5 : 1 });
+        else a.play('idle');
         break;
       case 'windup':
-      case 'attack':
-        if (this.atk === 'slam') a.play('2H_Melee_Attack_Chop', { fit: (wind + act) * 1.15, fade: 0.15 });
-        else if (this.atk === 'swipe') a.play('2H_Melee_Attack_Slice', { fit: (wind + act) * 1.15, fade: 0.15 });
-        else if (this.atk === 'charge') a.play(this.state === 'windup' ? '2H_Melee_Idle' : 'Running_A', { speed: 1.2 });
-        else a.play('Spellcast_Raise', { fit: wind + act });
+      case 'attack': {
+        const clip = this.atk === 'swipe' ? 'attack2' : 'attack';
+        const strike = this.atk === 'swipe' ? 0.62 : 0.7;
+        if (this.atk === 'charge') a.play(this.state === 'windup' ? 'idle' : 'run', { speed: 1.4 });
+        else if (this.atk === 'summon') a.scrub('attack2', this.state === 'windup' ? 0.45 : 0.3);
+        else if (this.state === 'windup') a.scrub(clip, (strike * this.t) / Math.max(0.01, wind * speedMul));
+        else a.scrub(clip, Math.min(0.98, strike + ((0.98 - strike) * this.t) / Math.max(0.01, act)));
         break;
+      }
       case 'stun':
-        a.play('Sit_Floor_Idle');
+        a.scrub('idle', 0.3);
         break;
       case 'dead':
-        a.play('Death_A', { once: true });
+        a.play('die', { once: true, fit: 1.2 });
         break;
     }
     a.update(dt);
-    const head = a.node('head');
-    if (head) {
-      head.getWorldPosition(this.headPos);
-      this.crown.position.set(this.headPos.x - this.group.position.x, this.headPos.y - this.group.position.y + 1.7, 0);
-    }
+    this.crown.visible = this.state !== 'dead';
   }
 
   private go(s: State) {

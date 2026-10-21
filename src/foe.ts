@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import type { Container } from 'pixi.js';
 import type { Body } from './physics';
 import type { EnemyDef } from './data/enemies';
 import type { Game } from './game';
@@ -7,7 +7,7 @@ import type { Game } from './game';
 export interface Foe {
   readonly def: EnemyDef;
   body: Body;
-  group: THREE.Group;
+  view: Container;
   remove: boolean;
   readonly dead: boolean;
   summoned: boolean; // spawned by a summoner: gives no souls, so it cannot be farmed
