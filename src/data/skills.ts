@@ -37,6 +37,7 @@ export const SKILLS: SkillDef[] = [
   { id: 'hunter_2', branch: 'hunter', name: 'Aljava maior', desc: '+5 flechas', cost: 120, requires: 'hunter_1', effects: { maxArrows: 5 } },
   { id: 'bastion_boss', branch: 'bastion', name: 'Coração do Ogro', desc: '+1 de vida máxima', cost: 0, bossReward: true, effects: { maxHp: 1 } },
   { id: 'blade_boss', branch: 'blade', name: 'Coroa do Rei', desc: '+0,5 de dano e parry maior', cost: 0, bossReward: true, effects: { damage: 0.5, parryWindow: 0.04 } },
+  { id: 'dragon_boss', branch: 'blade', name: 'Coração de Dragão', desc: '+1 de vida, +25 de stamina e +0,5 de dano', cost: 0, bossReward: true, effects: { maxHp: 1, maxStamina: 25, damage: 0.5 } },
   { id: 'hunter_3', branch: 'hunter', name: 'Pulo duplo', desc: 'um pulo extra no ar', cost: 0, bossReward: true, effects: { airJumps: 1 } },
 ];
 

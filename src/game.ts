@@ -8,6 +8,7 @@ import { Enemy } from './enemy';
 import { Critter } from './critter';
 import { Boss } from './boss';
 import { Necromancer } from './necromancer';
+import { DeadDragon } from './dragon';
 import { EnemyBolt, BoltKind } from './enemybolt';
 import type { Foe } from './foe';
 import { buildLevel, Level, ChestObj } from './level';
@@ -431,7 +432,7 @@ export class Game {
     this.boss = null;
     if (def.boss) {
       const bd = ENEMIES[def.boss.type];
-      this.boss = def.boss.type === 'carnical_rei' ? new Boss(bd, def.boss.x, def.boss.y) : def.boss.type === 'necromante' ? new Necromancer(bd, def.boss.x, def.boss.y) : makeFoe(bd, def.boss.x, def.boss.y);
+      this.boss = def.boss.type === 'carnical_rei' ? new Boss(bd, def.boss.x, def.boss.y) : def.boss.type === 'necromante' ? new Necromancer(bd, def.boss.x, def.boss.y) : def.boss.type === 'dragao' ? new DeadDragon(bd, def.boss.x, def.boss.y) : makeFoe(bd, def.boss.x, def.boss.y);
       foes.push(this.boss);
     }
     this.enemies = foes;
@@ -510,7 +511,7 @@ export class Game {
 
     const def = this.level.def;
     const p = this.player.body;
-    if (this.boss && !this.bossLocked && !this.boss.dead && this.player.alive && p.x > def.boss!.arena[0] + 4 && p.x < def.boss!.arena[1] && Math.abs(p.y - def.boss!.y) < 8) {
+    if (this.boss && !this.bossLocked && !this.boss.dead && this.player.alive && p.x > def.boss!.arena[0] + 4 && p.x < def.boss!.arena[1] && p.y > def.boss!.y - 2 && p.y < def.boss!.y + 14) {
       this.lockArena();
     }
     if (this.boss && this.bossLocked && !this.boss.dead) this.hud.setBoss(this.boss.def.name, this.boss.hp / (this.boss.maxHp ?? this.boss.def.hp));
@@ -525,7 +526,7 @@ export class Game {
     const b = this.level.def.bounds;
     const k = 1 - Math.exp(-5 * dt);
     // frame the arena a little wider during the boss fight; show more on narrow screens
-    const wantView = Math.max(this.bossLocked ? 13.5 : 11, 15 / (innerWidth / innerHeight));
+    const wantView = Math.max(this.bossLocked ? 14.5 : 11, 15 / (innerWidth / innerHeight));
     c.view += (wantView - c.view) * (1 - Math.exp(-3 * dt));
     const halfH = c.view / 2;
     const halfW = (c.view * (innerWidth / innerHeight)) / 2;

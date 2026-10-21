@@ -149,6 +149,11 @@ export const ENEMIES: Record<string, EnemyDef> = {
     detect: 16, reach: 3.6, windup: 0.8, active: 0.4, recover: 0.9, souls: 280, reward: 'bastion_boss',
     sprite: 'ogre', monster: true, body: 4.4,
   },
+  dragao: {
+    id: 'dragao', name: 'Dragão-morto', kind: 'boss', hp: 44, speed: 2.8, damage: 2, w: 3.4, h: 3.0, scale: 3,
+    detect: 40, reach: 4.5, windup: 0.8, active: 0.4, recover: 1.0, souls: 500, reward: 'dragon_boss',
+    sprite: 'drake', body: 4.4,
+  },
   carnical_rei: {
     id: 'carnical_rei', name: 'Carniçal Rei', kind: 'boss', hp: 30, speed: 1.9, damage: 2, w: 1.9, h: 3.4, scale: 2,
     detect: 30, reach: 3.2, windup: 0.9, active: 0.3, recover: 0.8, souls: 300,

@@ -12,15 +12,12 @@ function build() {
   // ---- the glade (x 0-40) ----
   m.at(3, 14, 'P');
   m.at(10, 14, 'z');
-  m.at(15, 14, 'z');
   m.at(20, 14, 'l');
   m.at(24, 14, 'x');
   m.at(27, 14, 'C');
   m.ground(29, 32, 15);
   m.ground(33, 36, 16);
   m.ground(37, 40, 17);
-  m.at(31, 15, 'k');
-  m.at(35, 16, 'z');
 
   // ---- the plateau (x 41-170) ----
   m.ground(41, W - 1, 18);
@@ -41,10 +38,7 @@ function build() {
   m.plat(62, 10, 3);
   m.at(63, 10, '$');
   m.at(66, 8, 'q');
-  m.at(68, 8, 'q');
   m.at(70, 8, 'f');
-  m.at(54, 8, 'z');
-  m.at(51, 8, 'z');
   // way back up: a shaft of branches
   m.carve(70, 8, 73, 17);
   m.climb(70, 9, 18);
@@ -58,7 +52,6 @@ function build() {
   m.plat(64, 19, 3);
   m.at(65, 19, 'a');
   m.at(78, 18, 'o');
-  m.at(82, 18, 'z');
   m.at(85, 18, 'x');
   m.at(88, 18, 'l');
 
@@ -84,10 +77,7 @@ function build() {
   // ---- the east woods (x 108-141) ----
   m.at(112, 18, 'z');
   m.at(116, 18, 'd');
-  m.at(117, 18, 'd');
-  m.at(118, 18, 'd');
   m.at(122, 18, 'l');
-  m.at(125, 18, 'x');
   m.at(128, 18, 'q');
   m.at(132, 18, 'C');
   m.at(135, 18, 'g');

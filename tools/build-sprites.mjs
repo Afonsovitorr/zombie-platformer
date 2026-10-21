@@ -12,7 +12,7 @@ if (!src) throw new Error('usage: build-sprites.mjs <MaximumBounds dir> [out]');
 const SCALE = 0.5;
 const COLS = 8;
 
-// variant: [source character, hue shift (deg), saturation, brightness]
+// variant: [source character, hue shift (deg), saturation, brightness, scale (optional)]
 const VARIANTS = {
   hero: ['Knight', 0, 1, 1],
   walker: ['Knight', 100, 0.85, 0.92],
@@ -22,8 +22,8 @@ const VARIANTS = {
   necro: ['Princess', 100, 0.8, 0.8],
   archer: ['Princess', 150, 0.6, 0.85],
   heroine: ['Princess', 0, 1, 1],
-  whelp: ['Dragon', 80, 0.6, 0.9],
-  drake: ['Dragon', 90, 0.4, 0.62],
+  whelp: ['Dragon', 80, 0.6, 0.9, 0.4],
+  drake: ['Dragon', 90, 0.4, 0.62, 0.8],
 };
 // animation name in the pack -> game name, and every how-manyeth frame to keep
 const ANIMS = { Idle: ['idle', 2], Walk: ['walk', 1], Run: ['run', 1], Jump: ['jump', 2], Attack: ['attack', 1], Attack2: ['attack2', 1], Die: ['die', 1] };
@@ -59,13 +59,14 @@ for (const c of new Set(Object.values(VARIANTS).map((v) => v[0]))) {
 
 fs.mkdirSync(out, { recursive: true });
 const manifest = {};
-for (const [name, [c, hue, sat, bri]] of Object.entries(VARIANTS)) {
+for (const [name, [c, hue, sat, bri, vscale]] of Object.entries(VARIANTS)) {
+  const SC = vscale ?? SCALE;
   const cr = crops[c];
   const w = cr.x1 - cr.x0 + 1;
   const h = cr.y1 - cr.y0 + 1;
-  const fw = Math.round(w * SCALE);
-  const fh = Math.round(h * SCALE);
-  const entry = { fw, fh, anchorX: (cr.feetX - cr.x0) * SCALE, anchorY: (cr.feetY - cr.y0) * SCALE, bodyH: (cr.feetY - cr.bodyTop) * SCALE, anims: {} };
+  const fw = Math.round(w * SC);
+  const fh = Math.round(h * SC);
+  const entry = { fw, fh, anchorX: (cr.feetX - cr.x0) * SC, anchorY: (cr.feetY - cr.y0) * SC, bodyH: (cr.feetY - cr.bodyTop) * SC, anims: {} };
   for (const [a, [key, step]] of Object.entries(ANIMS)) {
     const files = listFrames(c, a).filter((_, i) => i % step === 0);
     if (!files.length) continue;

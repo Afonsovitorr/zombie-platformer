@@ -57,7 +57,7 @@ export interface Point {
 export interface LevelDef {
   id: string;
   name: string;
-  theme: 'cemetery' | 'forest' | 'castle';
+  theme: 'cemetery' | 'forest' | 'castle' | 'crypt';
   cols: number;
   rows: number;
   yOffset: number;

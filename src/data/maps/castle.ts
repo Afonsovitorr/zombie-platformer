@@ -13,15 +13,12 @@ function build() {
   // ---- the great hall (floor at surface 20) ----
   m.carve(2, 20, 127, 27);
   m.at(3, 20, 'P');
-  m.at(9, 20, 'w');
   m.plat(12, 21, 3);
   m.at(13, 21, 'a');
-  m.at(17, 20, 'w');
   m.at(22, 20, 'h');
   m.at(26, 20, 'C');
   m.spikes(30, 31, 20);
   m.at(34, 20, 'r');
-  m.at(38, 22, 'k');
 
   // broken floor over the dungeon, bridged by beams
   m.carve(40, 14, 47, 19);
@@ -34,11 +31,8 @@ function build() {
   m.at(57, 21, 'o');
   m.at(62, 20, 'C');
   m.at(65, 20, 'M');
-  m.at(70, 20, 'w');
   m.at(74, 20, 'n');
   m.at(78, 20, 'x');
-  m.at(84, 20, 'h');
-  m.at(86, 22, 'k');
   m.at(90, 20, 'b');
   m.plat(94, 21, 2);
   m.at(95, 21, '$');
@@ -51,13 +45,10 @@ function build() {
   m.plat(60, 10, 3);
   m.at(61, 10, '$');
   m.at(66, 8, 'q');
-  m.at(68, 8, 'q');
   m.at(73, 8, 'g');
   m.at(80, 8, 'f');
   m.at(86, 8, 'm');
   m.at(92, 8, 'd');
-  m.at(93, 8, 'd');
-  m.at(94, 8, 'd');
   m.at(100, 8, 'C');
   m.spikes(76, 77, 8);
   // hidden cell west of the dungeon
@@ -71,9 +62,7 @@ function build() {
   // ---- the stair to the battlements (x 100-105) ----
   m.carve(100, 28, 105, 33);
   m.climb(100, 21, 32, 3);
-  m.at(98, 20, 'k');
   m.at(110, 20, 'a');
-  m.at(114, 20, 'w');
   m.at(118, 20, 'n');
   m.at(122, 20, 'C');
 
@@ -86,12 +75,7 @@ function build() {
   m.at(86, 32, 'a');
   m.at(92, 32, 'o');
   m.at(110, 32, 'y');
-  m.at(114, 32, 'a');
-  m.at(120, 32, 'k');
   m.at(132, 32, 'x');
-  m.at(138, 32, 'y');
-  m.at(142, 32, 'o');
-  m.at(148, 32, 'k');
   m.at(152, 32, 'a');
   m.at(156, 32, 'C');
   m.at(160, 32, '$');

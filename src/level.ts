@@ -23,6 +23,7 @@ export interface Theme {
 export const THEMES: Record<LevelDef['theme'], Theme> = {
   cemetery: { skyTop: 0x2a1f5c, skyBottom: 0x9b7fe0, sun: 0xfff2b8, star: true, far: 0x5a47a6, mid: 0x3f3180, grass: 0x66b85a, grassLight: 0x8ad46e, earth: 0x7a5238, earthDark: 0x5e3d2a, stone: false },
   forest: { skyTop: 0x143f4a, skyBottom: 0x62d0a8, sun: 0xe6ffd0, star: false, far: 0x2f8f72, mid: 0x1f6b55, grass: 0x78cf50, grassLight: 0xa0e870, earth: 0x7d5434, earthDark: 0x5f3f27, stone: false },
+  crypt: { skyTop: 0x0b1a26, skyBottom: 0x3a6c7a, sun: 0xd6ecff, star: true, far: 0x2d5668, mid: 0x1c3a4c, grass: 0x8fb0b8, grassLight: 0xbad4da, earth: 0x58727e, earthDark: 0x40596a, stone: true },
   castle: { skyTop: 0x35122f, skyBottom: 0xf08a82, sun: 0xffd9a0, star: false, far: 0x8a4a70, mid: 0x5e2c52, grass: 0x9a93c0, grassLight: 0xc3bdea, earth: 0x6c668f, earthDark: 0x544e78, stone: true },
 };
 
@@ -537,7 +538,7 @@ export function buildLevel(def: LevelDef): Level {
     }
     return l && rr;
   };
-  const caveColor = def.theme === 'castle' ? 0x2c1a34 : def.theme === 'forest' ? 0x1d3a2e : 0x231a40;
+  const caveColor = def.theme === 'castle' ? 0x2c1a34 : def.theme === 'crypt' ? 0x14222c : def.theme === 'forest' ? 0x1d3a2e : 0x231a40;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (isBlock(c, r)) continue;

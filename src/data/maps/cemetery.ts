@@ -13,7 +13,6 @@ function build() {
   // ---- the gate (x 0-30) ----
   m.at(3, GY, 'P');
   m.at(10, GY, 'w');
-  m.at(17, GY, 'w');
   m.ground(18, 21, GY + 1);
   m.at(19, GY + 1, '$'); // a chest on the mound
   m.at(23, GY, 't');
@@ -22,7 +21,6 @@ function build() {
   m.spikes(29, 30, GY - 1);
 
   // ---- the graveyard (x 32-100) ----
-  m.at(34, GY, 'w');
   m.plat(34, GY + 1, 2);
   m.plat(37, GY + 2, 3);
   m.plat(41, GY + 3, 2);
@@ -33,29 +31,23 @@ function build() {
   m.at(50, GY, 'M');
   m.at(54, GY + 2, 'k');
   m.at(62, GY, 'o');
-  m.at(66, GY, 'w');
   m.plat(70, GY + 1, 2);
   m.plat(73, GY + 2, 3);
   m.at(74, GY + 2, 'a');
   m.plat(77, GY + 1, 2);
   m.at(70, GY, 'l');
   m.at(80, GY, 'b');
-  m.at(86, GY + 2, 'k');
-  m.at(89, GY, 'w');
-  m.at(93, GY, 'x');
   m.at(96, GY, 'f');
 
   // ---- the crypt (x 52-99, floor at surface 4) ----
   m.carve(52, 4, 99, 9);
   m.carve(57, 10, 58, 13); // the way down
-  m.at(60, 4, 't');
   m.plat(64, 5, 2);
   m.plat(66, 6, 3);
   m.at(67, 6, '$');
   m.at(71, 4, 'f');
   m.spikes(74, 75, 4);
   m.at(78, 4, 'd');
-  m.at(79, 4, 'd');
   m.at(80, 4, 'd');
   m.at(84, 4, 'q');
   m.at(88, 6, 'k');
@@ -81,10 +73,8 @@ function build() {
   m.at(106, 6, '*');
 
   // ---- the mausoleum hill (x 102-149) ----
-  m.at(104, GY + 1, 'm');
   m.at(108, GY + 2, 'b');
   m.at(112, GY + 3, 'a');
-  m.at(116, GY + 4, 'a');
   m.at(120, GY + 5, 'n');
   m.at(124, GY + 6, 'C');
   m.at(126, GY + 6, 'M');
