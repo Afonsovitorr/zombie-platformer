@@ -10,6 +10,7 @@ interface AnimMeta {
   frames: number;
   cols: number;
   step: number; // every how-manyth source frame the atlas kept (source runs at 30 fps)
+  strike?: number; // fraction of the clip where the blow lands (default 0.7)
 }
 
 interface SheetMeta {
@@ -32,14 +33,28 @@ interface MonsterMeta {
 const sheets: Record<string, SheetMeta> = {};
 const monsters: Record<string, MonsterMeta> = {};
 const monsterFrames = new Map<string, Texture[]>();
+const scenery: Record<string, Texture> = {};
+let sceneryBase: Texture | null = null;
+const sceneryRects: Record<string, Rectangle> = {};
+let skyPicture: Texture | null = null;
 const frames = new Map<string, Texture[]>();
 
 export async function loadSprites(onProgress: (k: number) => void) {
   const base = `${import.meta.env.BASE_URL}sprites/`;
-  Object.assign(sheets, await (await fetch(`${base}manifest.json`)).json());
+  Object.assign(sheets, await (await fetch(`${base}manifest.json`)).json(), await (await fetch(`${base}undead.json`)).json());
   Object.assign(monsters, await (await fetch(`${base}monsters.json`)).json());
   const jobs: { variant: string; anim: string; meta: AnimMeta }[] = [];
   for (const [variant, s] of Object.entries(sheets)) for (const [anim, meta] of Object.entries(s.anims)) jobs.push({ variant, anim, meta });
+  // graveyard tiles, props and the night-sky picture
+  {
+    const frames = (await (await fetch(`${base}scenery.json`)).json()) as Record<string, { x: number; y: number; w: number; h: number }>;
+    sceneryBase = await Assets.load<Texture>(`${base}scenery.webp`);
+    for (const [name, f] of Object.entries(frames)) {
+      sceneryRects[name] = new Rectangle(f.x, f.y, f.w, f.h);
+      scenery[name] = new Texture({ source: sceneryBase.source, frame: sceneryRects[name] });
+    }
+    skyPicture = await Assets.load<Texture>(`${base}graveyard-bg.webp`);
+  }
   let done = 0;
   const total = jobs.length + Object.keys(monsters).length;
   await Promise.all([
@@ -95,6 +110,11 @@ export class SpriteActor {
     this.sprite.scale.set(this.scale);
     this.root.addChild(this.sprite);
     this.play('idle');
+  }
+
+  // where in a clip the blow lands, as a 0..1 fraction (the wind-up is everything before it)
+  strike(name: string) {
+    return this.meta.anims[name]?.strike ?? 0.7;
   }
 
   has(name: string) {
@@ -230,4 +250,18 @@ export class MonsterActor {
       this.sprite.tint = this.hold <= 0 ? 0xffffff : lerpColor(0xffffff, this.holdColor, this.hold);
     }
   }
+}
+
+export function sceneryTex(name: string) {
+  return scenery[name];
+}
+
+// the top `h` pixels of a scenery tile (thin floors)
+export function scenerySlice(name: string, h: number) {
+  const r = sceneryRects[name];
+  return new Texture({ source: sceneryBase!.source, frame: new Rectangle(r.x, r.y, r.width, Math.min(h, r.height)) });
+}
+
+export function skyTex() {
+  return skyPicture!;
 }

@@ -284,7 +284,20 @@ export class Game {
         this.start();
       },
     });
+    buttons.push({ label: 'Créditos', run: () => this.showCredits() });
     this.menu.show('Zombie Platformer', buttons, 'Protótipo');
+  }
+
+  private showCredits() {
+    this.menu.show('Créditos', [{ label: 'Voltar', run: () => this.showMainMenu() }], [
+      'Herói, dragão e princesa: Knight, Princess and Dragon 2, de akylrum (CC0)',
+      'Zumbi: "Zombie animations", de Irina Mir / irmirx (CC BY 3.0)',
+      'Zumbi criança: 2D Zombie Kids, de CraftPix / Free Game Assets',
+      'Monstros: coleção Land Monster, de Bevouliin (CC0)',
+      'Cenário do cemitério: Free Graveyard Platformer Tileset, de pzUH (CC0)',
+      'Sons e música: sintetizados no próprio jogo',
+    ].join('
+'));
   }
 
   private start() {

@@ -53,7 +53,7 @@ export class Boss implements Foe {
     c.circle(0, -12, 5).fill({ color: 0xe0443a }).stroke({ width: 2.5, color: 0x1a1030 });
     c.scale.set(def.body / 3.2);
     this.view.addChild(c);
-    this.crown.position.set(-0.18 * px(def.body), -px(def.body) * 0.96);
+    this.crown.position.set(-0.06 * px(def.body), -px(def.body) * 0.9);
   }
 
   get dead() {
@@ -255,9 +255,9 @@ export class Boss implements Foe {
       case 'windup':
       case 'attack': {
         const clip = this.atk === 'swipe' ? 'attack2' : 'attack';
-        const strike = this.atk === 'swipe' ? 0.62 : 0.7;
+        const strike = a.strike(clip);
         if (this.atk === 'charge') a.play(this.state === 'windup' ? 'idle' : 'run', { speed: 1.4 });
-        else if (this.atk === 'summon') a.scrub('attack2', this.state === 'windup' ? 0.45 : 0.3);
+        else if (this.atk === 'summon') a.scrub('attack', this.state === 'windup' ? 0.05 : 0.1);
         else if (this.state === 'windup') a.scrub(clip, (strike * this.t) / Math.max(0.01, wind * speedMul));
         else a.scrub(clip, Math.min(0.98, strike + ((0.98 - strike) * this.t) / Math.max(0.01, act)));
         break;

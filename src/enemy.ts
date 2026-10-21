@@ -314,10 +314,10 @@ export class Enemy implements Foe {
         break;
       case 'windup':
         // wind-up frames, ending on the frame just before the baked-in slash
-        a.scrub('attack', (0.7 * this.t) / Math.max(0.01, d.windup));
+        a.scrub('attack', (a.strike('attack') * this.t) / Math.max(0.01, d.windup));
         break;
       case 'attack':
-        a.scrub('attack', Math.min(0.98, 0.7 + (0.28 * this.t) / Math.max(0.01, d.active)));
+        a.scrub('attack', Math.min(0.98, a.strike('attack') + ((0.98 - a.strike('attack')) * this.t) / Math.max(0.01, d.active)));
         break;
       case 'hurt':
         a.scrub('idle', 0);

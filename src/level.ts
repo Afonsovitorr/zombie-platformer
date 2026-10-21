@@ -1,7 +1,7 @@
-import { Container, FillGradient, Graphics } from 'pixi.js';
+import { Container, FillGradient, Graphics, Sprite } from 'pixi.js';
 import type { Box } from './physics';
 import { CELL, type ChestDef, type LevelDef, type SecretDef } from './data/levels';
-import { U, px, py } from './gfx';
+import { U, px, py, sceneryTex, scenerySlice, skyTex } from './gfx';
 
 export const OUTLINE = 0x1a1030;
 const OL = { width: 5, color: OUTLINE, join: 'round' as const, cap: 'round' as const };
@@ -21,7 +21,7 @@ export interface Theme {
 }
 
 export const THEMES: Record<LevelDef['theme'], Theme> = {
-  cemetery: { skyTop: 0x2a1f5c, skyBottom: 0x9b7fe0, sun: 0xfff2b8, star: true, far: 0x5a47a6, mid: 0x3f3180, grass: 0x66b85a, grassLight: 0x8ad46e, earth: 0x7a5238, earthDark: 0x5e3d2a, stone: false },
+  cemetery: { skyTop: 0x2a1f5c, skyBottom: 0x9b7fe0, sun: 0xfff2b8, star: true, far: 0x5a47a6, mid: 0x3f3180, grass: 0x2c5560, grassLight: 0x3f7480, earth: 0x3d2617, earthDark: 0x2a190f, stone: false },
   forest: { skyTop: 0x143f4a, skyBottom: 0x62d0a8, sun: 0xe6ffd0, star: false, far: 0x2f8f72, mid: 0x1f6b55, grass: 0x78cf50, grassLight: 0xa0e870, earth: 0x7d5434, earthDark: 0x5f3f27, stone: false },
   crypt: { skyTop: 0x0b1a26, skyBottom: 0x3a6c7a, sun: 0xd6ecff, star: true, far: 0x2d5668, mid: 0x1c3a4c, grass: 0x8fb0b8, grassLight: 0xbad4da, earth: 0x58727e, earthDark: 0x40596a, stone: true },
   castle: { skyTop: 0x35122f, skyBottom: 0xf08a82, sun: 0xffd9a0, star: false, far: 0x8a4a70, mid: 0x5e2c52, grass: 0x9a93c0, grassLight: 0xc3bdea, earth: 0x6c668f, earthDark: 0x544e78, stone: true },
@@ -51,7 +51,7 @@ export interface Level {
   def: LevelDef;
   back: Container; // everything behind the characters
   front: Container;
-  sky: Graphics;
+  sky: Container;
   solids: Box[]; // mutable: breakable walls are removed from here
   hazards: Box[];
   theme: Theme;
@@ -77,53 +77,6 @@ function flame(w: number, h: number, color: number, inner: number) {
   g.moveTo(0, 0).quadraticCurveTo(-w, -h * 0.45, -w * 0.15, -h).quadraticCurveTo(w * 0.9, -h * 0.55, 0, 0);
   g.fill({ color }).stroke({ ...OL, width: 3 });
   g.moveTo(0, -2).quadraticCurveTo(-w * 0.5, -h * 0.35, 0, -h * 0.65).quadraticCurveTo(w * 0.5, -h * 0.35, 0, -2).fill({ color: inner });
-  return g;
-}
-
-function gravestone(rand: () => number) {
-  const g = new Graphics();
-  const w = 38 + rand() * 18;
-  const h = 52 + rand() * 30;
-  g.moveTo(-w / 2, 0).lineTo(-w / 2, -h + w / 2).arc(0, -h + w / 2, w / 2, Math.PI, 0).lineTo(w / 2, 0).closePath();
-  g.fill({ color: 0xb9b6d0 }).stroke(OL);
-  g.rect(-w / 2 + 5, -h * 0.55, 6, h * 0.5).fill({ color: 0xffffff, alpha: 0.28 });
-  if (rand() < 0.5) {
-    g.moveTo(0, -h + 14).lineTo(0, -h + 38).moveTo(-8, -h + 22).lineTo(8, -h + 22).stroke({ width: 5, color: 0x6e6a8e, cap: 'round' });
-  } else {
-    g.moveTo(-9, -h + 22).lineTo(9, -h + 22).moveTo(-9, -h + 32).lineTo(9, -h + 32).stroke({ width: 4, color: 0x6e6a8e, cap: 'round' });
-  }
-  g.ellipse(0, 2, w * 0.6, 7).fill({ color: 0x3a2c20, alpha: 0.5 });
-  return g;
-}
-
-function deadTree(rand: () => number, h: number, trunk = 0x5a3b2e) {
-  const g = new Graphics();
-  const w = h * 0.12;
-  g.poly([-w, 0, -w * 0.5, -h, w * 0.5, -h, w, 0]).fill({ color: trunk }).stroke(OL);
-  const branch = (x: number, y: number, ang: number, len: number, depth: number) => {
-    const x2 = x + Math.cos(ang) * len;
-    const y2 = y - Math.sin(ang) * len;
-    g.moveTo(x, y).lineTo(x2, y2).stroke({ width: 10 - depth * 3, color: OUTLINE, cap: 'round' });
-    g.moveTo(x, y).lineTo(x2, y2).stroke({ width: 5 - depth * 1.4, color: trunk, cap: 'round' });
-    if (depth < 2) {
-      branch(x2, y2, ang + 0.6 + rand() * 0.4, len * 0.62, depth + 1);
-      branch(x2, y2, ang - 0.6 - rand() * 0.4, len * 0.62, depth + 1);
-    }
-  };
-  branch(0, -h * 0.95, Math.PI / 2 + 0.7, h * 0.4, 0);
-  branch(0, -h * 0.95, Math.PI / 2 - 0.7, h * 0.4, 0);
-  branch(0, -h * 0.6, Math.PI / 2 + 1.1, h * 0.3, 1);
-  return g;
-}
-
-function fence(n: number) {
-  const g = new Graphics();
-  const w = 26;
-  g.rect(0, -52, n * w, 7).fill({ color: 0x8b6b52 }).stroke({ ...OL, width: 3 });
-  g.rect(0, -26, n * w, 7).fill({ color: 0x8b6b52 }).stroke({ ...OL, width: 3 });
-  for (let i = 0; i < n; i++) {
-    g.poly([i * w + 3, 0, i * w + 3, -66, i * w + w / 2, -80, i * w + w - 3, -66, i * w + w - 3, 0]).fill({ color: 0xa8845f }).stroke({ ...OL, width: 3 });
-  }
   return g;
 }
 
@@ -383,7 +336,15 @@ export function buildLevel(def: LevelDef): Level {
   const horizonY = 0;
 
   // sky: screen-fixed gradient (resized with the window)
-  const sky = new Graphics();
+  const sky = new Container();
+  const skyGfx = new Graphics();
+  sky.addChild(skyGfx);
+  const tiled = def.theme === 'cemetery'; // drawn with the graveyard tile set
+  const skyPic = tiled ? new Sprite(skyTex()) : null;
+  if (skyPic) {
+    skyPic.anchor.set(0.5);
+    sky.addChild(skyPic);
+  }
 
   const addLayer = (f: number, build: (c: Container, from: number, to: number) => void) => {
     const c = new Container();
@@ -396,7 +357,7 @@ export function buildLevel(def: LevelDef): Level {
   };
 
   // celestial body and stars
-  addLayer(0.04, (c, from, to) => {
+  if (!tiled) addLayer(0.04, (c, from, to) => {
     const mid = (from + to) / 2;
     c.addChild(new Graphics().circle(mid + 560, -330, 120).fill({ color: theme.sun, alpha: 0.18 }));
     c.addChild(new Graphics().circle(mid + 560, -330, 84).fill({ color: theme.sun }).stroke({ ...OL, width: 4 }));
@@ -408,7 +369,7 @@ export function buildLevel(def: LevelDef): Level {
 
   // drifting clouds
   const clouds: Container[] = [];
-  addLayer(0.1, (c, from, to) => {
+  if (!tiled) addLayer(0.1, (c, from, to) => {
     for (let x = from; x < to; x += 420 + rand() * 360) {
       const cl = new Container();
       const w = 80 + rand() * 70;
@@ -421,23 +382,28 @@ export function buildLevel(def: LevelDef): Level {
     }
   });
 
-  if (def.theme === 'cemetery') {
-    addLayer(0.25, (c, from, to) => {
-      c.addChild(hills(from, to, 40, 340, theme.far, 3));
-      for (let x = from + 80; x < to; x += 260 + rand() * 200) {
-        const t = deadTree(rand, 150 + rand() * 90, 0x3a2c66);
-        t.position.set(x, 0);
+  if (tiled) {
+    const silhouette = (name: string, tint: number, scale: number, y: number) => {
+      const sp = new Sprite(sceneryTex(name));
+      sp.anchor.set(0.5, 1);
+      sp.scale.set(scale);
+      sp.tint = tint;
+      sp.y = y;
+      return sp;
+    };
+    addLayer(0.3, (c, from, to) => {
+      for (let x = from; x < to; x += 330 + rand() * 240) {
+        const t = silhouette('tree', 0x172229, 2.6 + rand() * 0.9, 40);
+        t.x = x;
         c.addChild(t);
       }
     });
-    addLayer(0.5, (c, from, to) => {
-      c.addChild(hills(from, to, 80, 220, theme.mid, 5));
-      for (let x = from + 40; x < to; x += 150 + rand() * 120) {
-        const gs = gravestone(rand);
-        gs.scale.set(0.8);
-        gs.position.set(x, 20 + rand() * 10);
-        gs.tint = 0x8f84c8;
-        c.addChild(gs);
+    addLayer(0.55, (c, from, to) => {
+      for (let x = from; x < to; x += 190 + rand() * 170) {
+        const names = ['tomb1', 'tomb2', 'deadbush', 'bush1', 'bush2'];
+        const t = silhouette(names[Math.floor(rand() * names.length)], 0x223239, 1.7 + rand() * 0.5, 30);
+        t.x = x;
+        c.addChild(t);
       }
     });
   } else if (def.theme === 'forest') {
@@ -486,7 +452,7 @@ export function buildLevel(def: LevelDef): Level {
   // The terrain is drawn in chunks that are hidden when off screen (cheaper on tablets).
   const CHW = 16;
   const CHH = 12;
-  interface Chunk { node: Container; cave: Graphics; deco: Container; terrain: Graphics; win: Win; x0: number; x1: number; yTop: number; yBot: number }
+  interface Chunk { node: Container; cave: Graphics; deco: Container; terrain: Graphics; tiles: Container; win: Win; x0: number; x1: number; yTop: number; yBot: number }
   const chunks: Chunk[] = [];
   const chunkMap = new Map<string, Chunk>();
   const chunkOf = (c: number, r: number) => {
@@ -500,8 +466,9 @@ export function buildLevel(def: LevelDef): Level {
       const cave = new Graphics();
       const deco = new Container();
       const terrain = new Graphics();
-      node.addChild(cave, deco, terrain);
-      k = { node, cave, deco, terrain, win, x0: win.c0 * CELL, x1: win.c1 * CELL, yTop: cellTopY(win.r0), yBot: cellTopY(win.r1) };
+      const tiles = new Container();
+      node.addChild(cave, deco, terrain, tiles);
+      k = { node, cave, deco, terrain, tiles, win, x0: win.c0 * CELL, x1: win.c1 * CELL, yTop: cellTopY(win.r0), yBot: cellTopY(win.r1) };
       chunkMap.set(key, k);
       chunks.push(k);
       stage.addChild(node);
@@ -538,7 +505,7 @@ export function buildLevel(def: LevelDef): Level {
     }
     return l && rr;
   };
-  const caveColor = def.theme === 'castle' ? 0x2c1a34 : def.theme === 'crypt' ? 0x14222c : def.theme === 'forest' ? 0x1d3a2e : 0x231a40;
+  const caveColor = tiled ? 0x14191d : def.theme === 'castle' ? 0x2c1a34 : def.theme === 'crypt' ? 0x14222c : def.theme === 'forest' ? 0x1d3a2e : 0x231a40;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (isBlock(c, r)) continue;
@@ -574,10 +541,20 @@ export function buildLevel(def: LevelDef): Level {
       }
     }
   };
-  if (def.theme === 'cemetery') {
-    scatter(3.6, () => { const r = rand(); return r < 0.6 ? gravestone(rand) : r < 0.8 ? pumpkin(22 + rand() * 12) : rock(26 + rand() * 12); });
-    for (const run of runs) if (run.x1 - run.x0 >= 8 && rand() < 0.8) place(fence(4 + Math.floor(rand() * 3)), run.x0 + 1.5 + rand() * (run.x1 - run.x0 - 6), run.y);
-    for (const run of runs) if (run.x1 - run.x0 >= 10 && rand() < 0.7) place(deadTree(rand, 220 + rand() * 90), run.x0 + 2 + rand() * (run.x1 - run.x0 - 4), run.y);
+  if (tiled) {
+    const prop = (name: string, scale: number) => {
+      const sp = new Sprite(sceneryTex(name));
+      sp.anchor.set(0.5, 1);
+      sp.scale.set(scale);
+      const c = new Container();
+      c.addChild(sp);
+      return c;
+    };
+    scatter(3.4, () => {
+      const r = rand();
+      return r < 0.28 ? prop('tomb1', 1.7) : r < 0.52 ? prop('tomb2', 1.7) : r < 0.66 ? prop(rand() < 0.5 ? 'bush1' : 'bush2', 1.3) : r < 0.76 ? prop('deadbush', 1.4) : r < 0.84 ? prop('crate', 0.75) : r < 0.9 ? prop(rand() < 0.5 ? 'skull1' : 'skull2', 0.7) : r < 0.95 ? prop('bones1', 0.8) : prop(rand() < 0.5 ? 'skeleton' : 'sign', 1.1);
+    });
+    for (const run of runs) if (run.x1 - run.x0 >= 8 && rand() < 0.8) place(prop('tree', 2.1), run.x0 + 2 + rand() * (run.x1 - run.x0 - 4), run.y);
   } else if (def.theme === 'forest') {
     scatter(3, () => { const r = rand(); return r < 0.35 ? bush(24 + rand() * 14, 0x4faa3e) : r < 0.6 ? mushroom(24 + rand() * 12) : r < 0.8 ? rock(24 + rand() * 12) : pumpkin(20 + rand() * 10); });
     for (const run of runs) if (run.x1 - run.x0 >= 8 && rand() < 0.8) place(roundTree(230 + rand() * 90, 0x3f9a46), run.x0 + 2 + rand() * (run.x1 - run.x0 - 4), run.y);
@@ -604,6 +581,30 @@ export function buildLevel(def: LevelDef): Level {
     for (let cc = 0; cc < cols; cc += CHW) {
       const k = chunkOf(cc, cr);
       const { win, terrain } = k;
+      if (tiled) {
+        // autotiling: pick the tile from which neighbours are open
+        for (let r = win.r0; r < win.r1; r++) {
+          for (let c = win.c0; c < win.c1; c++) {
+            if (!isEarth(c, r)) continue;
+            const up = isBlock(c, r - 1);
+            const down = isBlock(c, r + 1);
+            const left = isBlock(c - 1, r);
+            const right = isBlock(c + 1, r);
+            const pick = (...n: number[]) => n[Math.floor(rand() * n.length)];
+            let t: number;
+            if (!up) t = !down ? (!left ? 14 : !right ? 16 : 15) : !left ? 1 : !right ? 3 : pick(2, 7, 11);
+            else if (!down) t = !left ? 12 : !right ? 13 : 9;
+            else t = !left ? 4 : !right ? 6 : pick(5, 10);
+            const sp = new Sprite(sceneryTex(`tile${t}`));
+            const [x, y] = cellPx(c, r);
+            sp.position.set(x, y);
+            sp.width = CP + 1;
+            sp.height = CP + 1;
+            k.tiles.addChild(sp);
+          }
+        }
+        continue;
+      }
       for (let r = win.r0; r < win.r1; r++) {
         let c = win.c0;
         while (c < win.c1) {
@@ -655,6 +656,16 @@ export function buildLevel(def: LevelDef): Level {
 
   // jump-through platforms
   for (const b of def.oneWay) {
+    if (tiled) {
+      const cells = Math.round((b.x1 - b.x0) / CELL);
+      for (let i = 0; i < cells; i++) {
+        const sp = new Sprite(scenerySlice(cells === 1 ? 'tile15' : i === 0 ? 'tile14' : i === cells - 1 ? 'tile16' : 'tile15', 56));
+        sp.position.set(px(b.x0) + i * CP, py(b.y1));
+        sp.width = CP + 1;
+        stage.addChild(sp);
+      }
+      continue;
+    }
     const g = new Graphics();
     const w = px(b.x1 - b.x0);
     g.roundRect(0, 0, w, 34, 10).fill({ color: theme.stone ? theme.earth : 0x8a5f3c }).stroke(OL);
@@ -788,9 +799,16 @@ export function buildLevel(def: LevelDef): Level {
       return s;
     },
     resizeSky(w, h) {
-      sky.clear();
+      skyGfx.clear();
+      if (skyPic) {
+        skyGfx.rect(0, 0, w, h).fill({ color: 0x0c161c });
+        const k = Math.max(w / skyPic.texture.width, h / skyPic.texture.height);
+        skyPic.scale.set(k);
+        skyPic.position.set(w / 2, h / 2);
+        return;
+      }
       const grad = new FillGradient({ type: 'linear', start: { x: 0, y: 0 }, end: { x: 0, y: 1 }, colorStops: [{ offset: 0, color: theme.skyTop }, { offset: 1, color: theme.skyBottom }], textureSpace: 'local' });
-      sky.rect(0, 0, w, h).fill(grad);
+      skyGfx.rect(0, 0, w, h).fill(grad);
     },
   };
   return level;

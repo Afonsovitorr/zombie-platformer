@@ -28,17 +28,17 @@ export const ENEMIES: Record<string, EnemyDef> = {
   walker: {
     id: 'walker', name: 'Zumbi', kind: 'melee', hp: 3, speed: 2.4, damage: 1, w: 0.9, h: 1.8, scale: 1,
     detect: 10, reach: 1.5, windup: 0.55, active: 0.2, recover: 0.5, souls: 10,
-    sprite: 'walker', body: 2.0,
+    sprite: 'zombie', body: 2.1,
   },
   runner: {
     id: 'runner', name: 'Zumbi corredor', kind: 'melee', hp: 2, speed: 5, damage: 1, w: 0.8, h: 1.7, scale: 0.95,
     detect: 12, reach: 1.4, windup: 0.3, active: 0.2, recover: 0.45, souls: 15,
-    sprite: 'runner', body: 1.9,
+    sprite: 'kid', body: 1.9,
   },
   brute: {
     id: 'brute', name: 'Brutamontes', kind: 'melee', hp: 8, speed: 1.6, damage: 2, w: 1.3, h: 2.5, scale: 1.4,
     detect: 9, reach: 2.1, windup: 0.85, active: 0.25, recover: 0.8, souls: 40,
-    sprite: 'brute', body: 2.9,
+    sprite: 'zombie_brute', body: 3.1,
   },
   // Stationary shooter: telegraphs, then fires an arrow at the player's chest.
   archer: {
@@ -157,6 +157,6 @@ export const ENEMIES: Record<string, EnemyDef> = {
   carnical_rei: {
     id: 'carnical_rei', name: 'Carniçal Rei', kind: 'boss', hp: 30, speed: 1.9, damage: 2, w: 1.9, h: 3.4, scale: 2,
     detect: 30, reach: 3.2, windup: 0.9, active: 0.3, recover: 0.8, souls: 300,
-    sprite: 'king', body: 4.0, reward: 'blade_boss',
+    sprite: 'zombie_king', body: 4.3, reward: 'blade_boss',
   },
 };
