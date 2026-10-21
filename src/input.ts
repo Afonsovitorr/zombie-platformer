@@ -1,6 +1,6 @@
-export type Action = 'left' | 'right' | 'jump' | 'attack' | 'ranged' | 'dodge' | 'block' | 'restart' | 'pause';
+export type Action = 'left' | 'right' | 'jump' | 'attack' | 'ranged' | 'dodge' | 'block' | 'restart' | 'pause' | 'mute';
 
-const ACTIONS: Action[] = ['left', 'right', 'jump', 'attack', 'ranged', 'dodge', 'block', 'restart', 'pause'];
+const ACTIONS: Action[] = ['left', 'right', 'jump', 'attack', 'ranged', 'dodge', 'block', 'restart', 'pause', 'mute'];
 
 const KEYS: Record<string, Action> = {
   ArrowLeft: 'left', KeyA: 'left',
@@ -12,6 +12,7 @@ const KEYS: Record<string, Action> = {
   KeyK: 'block', KeyV: 'block', ArrowDown: 'block', KeyS: 'block',
   KeyR: 'restart',
   Escape: 'pause', KeyP: 'pause',
+  KeyM: 'mute',
 };
 
 const record = (v: boolean) => Object.fromEntries(ACTIONS.map((a) => [a, v])) as Record<Action, boolean>;

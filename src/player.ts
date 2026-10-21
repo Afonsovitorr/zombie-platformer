@@ -153,9 +153,9 @@ export class Player {
         b.vx *= 0.9;
         if (inp.pressed.attack && this.t > 0.08) this.queued = true;
         this.attackTick(g, st);
-        if (this.t > st.to && this.tryDodge(inp)) break;
+        if (this.t > st.to && this.tryDodge(inp, g)) break;
         if (this.t >= st.dur) {
-          if (this.queued && this.stage < STAGES.length - 1) this.startAttack(this.stage + 1, inp);
+          if (this.queued && this.stage < STAGES.length - 1) this.startAttack(this.stage + 1, inp, g);
           else this.endAttack();
         }
         break;
@@ -169,6 +169,7 @@ export class Player {
         b.vy = -20;
         this.plungeTick(g);
         if (b.onGround) {
+          g.audio.play('land');
           g.shake = Math.max(g.shake, 0.2);
           this.setState('free');
         }
@@ -232,10 +233,12 @@ export class Player {
 
     if (this.jumpBuf > 0 && !blocking) {
       if (this.coyote > 0) {
+        g.audio.play('jump');
         b.vy = JUMP;
         this.jumpBuf = 0;
         this.coyote = 0;
       } else if (this.airJumpsLeft > 0) {
+        g.audio.play('jump');
         b.vy = JUMP * 0.92;
         this.airJumpsLeft--;
         this.jumpBuf = 0;
@@ -247,21 +250,23 @@ export class Player {
       if (!b.onGround && inp.held.block) {
         this.setState('plunge');
       } else {
-        this.startAttack(0, inp);
+        this.startAttack(0, inp, g);
       }
       return;
     }
-    if (this.tryDodge(inp)) return;
+    if (this.tryDodge(inp, g)) return;
     if (inp.pressed.ranged && this.rangedCd <= 0 && this.arrows > 0) {
       this.rangedCd = 0.7;
       this.arrows--;
+      g.audio.play('bow');
       g.spawnBolt(b.x + this.facing * 0.6, b.y + 1.2, this.facing);
     }
   }
 
-  private tryDodge(inp: Input) {
+  private tryDodge(inp: Input, g: Game) {
     if (!inp.pressed.dodge || this.stamina < DODGE_COST) return false;
     if (inp.moveX !== 0) this.facing = sign(inp.moveX);
+    g.audio.play('dodge');
     this.stamina -= DODGE_COST;
     this.invuln = Math.max(this.invuln, DODGE_TIME + 0.08);
     this.stage = 0;
@@ -270,10 +275,11 @@ export class Player {
     return true;
   }
 
-  private startAttack(stage: number, inp: Input) {
+  private startAttack(stage: number, inp: Input, g: Game) {
     this.stage = stage;
     this.setState('attack');
     this.queued = false;
+    g.audio.play('swing');
     if (inp.moveX !== 0) this.facing = sign(inp.moveX);
     this.body.vx = this.facing * STAGES[stage].lunge * (this.body.onGround ? 1 : 0.5);
   }
@@ -326,9 +332,11 @@ export class Player {
         g.hitStop = 0.14;
         g.shake = Math.max(g.shake, 0.3);
         g.toast('Parry!');
+        g.audio.play('parry');
         return;
       }
       this.stamina -= BLOCK_COST;
+      g.audio.play('block');
       b.vx = away * 4;
       g.hitStop = 0.04;
       if (this.stamina <= 0) {
@@ -340,6 +348,7 @@ export class Player {
     }
 
     this.hp -= amount;
+    g.audio.play(this.hp <= 0 ? 'death' : 'hurt');
     g.hitStop = 0.08;
     g.shake = Math.max(g.shake, 0.25);
     b.vx = away * 7;

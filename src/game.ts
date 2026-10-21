@@ -9,6 +9,7 @@ import { buildLevel, Level } from './level';
 import { LEVELS } from './data/levels';
 import { ENEMIES } from './data/enemies';
 import type { EnemyDef } from './data/enemies';
+import { GameAudio } from './audio';
 import { BRANCH_NAMES, SKILLS, statsFor } from './data/skills';
 
 const STEP = 1 / 60;
@@ -24,6 +25,7 @@ export class Game {
   bolts: Bolt[] = [];
   hitStop = 0;
   shake = 0; // camera shake intensity, decays every frame
+  audio = new GameAudio();
 
   private mode: Mode = 'menu';
   private renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -54,6 +56,7 @@ export class Game {
     this.scene.add(moonLight);
 
     this.scene.add(this.level.group, this.player.group);
+    for (const ev of ['pointerdown', 'keydown'] as const) addEventListener(ev, () => this.audio.unlock());
     addEventListener('resize', () => this.resize());
     this.resize();
     this.reset();
@@ -118,6 +121,13 @@ export class Game {
     this.menu.show('Pausado', [
       { label: 'Continuar', run: () => this.togglePause() },
       { label: 'Habilidades', run: () => this.showSkills() },
+      {
+        label: this.audio.muted ? 'Som: desligado' : 'Som: ligado',
+        run: () => {
+          this.audio.toggleMute();
+          this.showPause();
+        },
+      },
       { label: 'Menu principal', run: () => this.showMainMenu() },
     ]);
   }
@@ -183,12 +193,14 @@ export class Game {
       this.player.hp = this.player.maxHp;
       this.player.stamina = this.player.maxStamina;
       this.player.arrows = this.player.stats.maxArrows;
+      this.audio.play('fire');
       this.hud.toast('Fogueira acesa · vida restaurada');
     }
   }
 
   private step(dt: number) {
     this.input.update();
+    if (this.input.pressed.mute) this.toast(this.audio.toggleMute() ? 'Som desligado' : 'Som ligado');
     if (this.mode === 'menu') return;
 
     if (this.input.pressed.pause) this.togglePause();

@@ -68,6 +68,7 @@ export class Enemy {
     this.body.vy = 4 * heavy;
     this.go(this.hp <= 0 ? 'dead' : 'hurt');
     this.skin.emissive.setHex(0xffffff);
+    g.audio.play(this.hp <= 0 ? 'death' : kb > 1.5 ? 'heavy' : 'hit');
     if (this.hp <= 0) g.onKill(this.def);
   }
 
@@ -90,7 +91,10 @@ export class Enemy {
         this.facing = sign(dx);
         b.vx = this.facing * d.speed;
         if (!near && Math.abs(dx) > d.detect + 4) this.go('idle');
-        else if (Math.abs(dx) < d.reach && Math.abs(dy) < 1.5 && p.alive) this.go('windup');
+        else if (Math.abs(dx) < d.reach && Math.abs(dy) < 1.5 && p.alive) {
+          g.audio.play('growl');
+          this.go('windup');
+        }
         break;
       case 'windup':
         b.vx = 0;
