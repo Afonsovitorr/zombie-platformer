@@ -96,7 +96,7 @@ Duração alvo: 8–12 min por fase.
 5. **Publicação:** GitHub (conta pessoal) + GitHub Pages.
 
 ## 11. Estado atual (demo)
-- **Fases** (mapas em grade, em ; verificadas por ): Cemitério da Vila (cripta subterrânea, poço de subida, colina do Necromante), Floresta Sombria (caverna de raízes, árvore gigante com oco secreto, Ogro-lodo) e Castelo em Ruínas (masmorra, salão, muralhas, Carniçal Rei).
+- **Fases** (mapas em grade, em src/data/maps; verificadas com npm run check:levels): Cemitério da Vila (cripta subterrânea, poço de subida, colina do Necromante), Floresta Sombria (caverna de raízes, árvore gigante com oco secreto, Ogro-lodo) e Castelo em Ruínas (masmorra, salão, muralhas, Carniçal Rei).
 - **Chefes:** Necromante (teleporta, tiros em leque, invoca caveiras, chuva de fogo), Ogro-lodo (salto e pancada com onda de choque) e Carniçal Rei (3 fases). Cada um dá uma recompensa permanente.
 - **Inimigos:** cavaleiros mortos-vivos (zumbi, corredor, bruto, arqueiro, filhote de dragão, necromante) e monstros: caveira voadora, caveira chifruda (cospe fogo), fantasma (some e reaparece), lápide viva, planta carnívora, golems de pedra/tijolo/gelo, gárgula, espinhento (espada não fura), diabrete (investida), sombras saltitantes, tomate-bomba, gosma azul, ciclope e ogro.
 - **Exploração:** plataformas finas (↓ + pular atravessa), espinhos, paredes rachadas que quebram a golpe (segredos), baús comuns e raros (almas, flechas, poções, pedaços de coração), fogueiras, mercador (poções, flechas, equipamentos).
