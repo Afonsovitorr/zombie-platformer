@@ -57,6 +57,7 @@ export class Player {
 
   private actor = new SpriteActor('hero', 2.25);
   private shield = new Graphics();
+  private aura = new Graphics();
   private wasAir = false;
   private ghostT = 0;
   private slashed = false;
@@ -65,7 +66,9 @@ export class Player {
     this.shield.arc(0, 0, 70, -1.2, 1.2).stroke({ width: 8, color: 0x7fe0ff, alpha: 0.9, cap: 'round' });
     this.shield.arc(0, 0, 58, -1.0, 1.0).stroke({ width: 4, color: 0xffffff, alpha: 0.6, cap: 'round' });
     this.shield.visible = false;
-    this.view.addChild(this.actor.root, this.shield);
+    this.aura.ellipse(0, -72, 52, 78).fill({ color: 0xffffff });
+    this.aura.visible = false;
+    this.view.addChild(this.aura, this.actor.root, this.shield);
   }
 
   get maxHp() {
@@ -373,6 +376,12 @@ export class Player {
 
     // blink while invulnerable (dodge gets a ghost trail instead)
     this.view.visible = this.invuln <= 0 || this.state === 'dodge' || Math.floor(this.t * 20 + this.invuln * 20) % 2 === 0;
+    // better equipment leaves a faint glow: silver for one upgrade, gold for the best pieces
+    const gear = g.save.data.gear;
+    const tier = gear.includes('sword_3') || gear.includes('armor_3') ? 2 : gear.length > 0 ? 1 : 0;
+    this.aura.visible = tier > 0;
+    this.aura.tint = tier === 2 ? 0xffd447 : 0xcfe8ff;
+    this.aura.alpha = 0.16 + Math.sin(performance.now() / 300) * 0.05;
     this.shield.visible = this.state === 'block';
     this.shield.position.set(this.facing * 0.85 * 64, -1.1 * 64);
     this.shield.scale.x = this.facing;
